@@ -227,7 +227,7 @@ function awesompd:create()
 	instance.track_duration = "00:00"
    instance.smart_update_timer = timer({ timeout = instance.update_interval })
    instance.smart_update_timer:connect_signal("timeout", function() instance:smart_update() end)
--- Continuous Notify (updates notify every 0.5 sec until duration passed or told to stop, keeping track/time in for up to date)
+-- Continuous Notify (updates notify every continuous_notify_interval sec until duration passed or stop is called)
 	instance.continuous_notify_interval = 0.5 -- How often to update when continuous is active
 	instance.continuous_notify_till = nil -- Seconds since epoch time when notify should be auto hidden. nil=no auto-hide
 	instance.continuous_notify_timer = timer({ timeout = instance.continuous_notify_interval })
@@ -244,11 +244,11 @@ function awesompd:create()
 	-- awesompd widget mouse hover.
 -- Widget configuration
    instance.widget:connect_signal("mouse::enter", function(c)
-                                                 instance:notify_track()
-                                              end)
+		instance:continuous_notify_start()
+	end)
    instance.widget:connect_signal("mouse::leave", function(c)
-                                                 instance:hide_notification()
-                                              end)
+		instance:continuous_notify_stop()
+	end)
    return instance
 end
 
@@ -978,7 +978,8 @@ end
 -- Checks if notification should be shown and shows if positive.
 function awesompd:check_notify()
    if self.to_notify then
-      self:notify_track()
+--      self:notify_track()
+		self:continuous_notify_start(5)
       self.to_notify = false
    end
 end
