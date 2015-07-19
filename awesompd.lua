@@ -148,19 +148,6 @@ local function non_empty(s)
    end
 end
 
--- Converts mm:ss to seconds
-function awesompd.minsec_to_sec(s)
-	if s then
-		local min = string.match(s,"%d+%:")
-		min = string.match(min,"%d+")
-		local sec = string.match(s,"%:%d+")
-		sec = string.match(sec,"%d+")
-		return (min*60)+sec
-	else
-		return 0
-	end
-end
-
 -- Icons
 
 function awesompd.load_icons(path)
@@ -214,7 +201,7 @@ function awesompd:create()
    instance.background = beautiful.bg_normal
    instance.scrolling = true
    instance.output_size = 30
-   instance.update_interval = 10
+   instance.update_interval = 60
    instance.path_to_icons = ""
    instance.ldecorator = " "
    instance.rdecorator = " "
@@ -223,10 +210,9 @@ function awesompd:create()
    instance.album_cover_size = 50
    instance.browser = "firefox"
 -- Smart Update (sets timer to check/update widget near when the current track should end)
-	instance.track_position = "00:00"
-	instance.track_duration = "00:00"
+   instance.track_position = "00:00"
+   instance.track_duration = "00:00"
    instance.smart_update_timer = timer({ timeout = instance.update_interval })
-   instance.smart_update_timer:connect_signal("timeout", function() instance:smart_update() end)
 -- Continuous Notify (updates notify every continuous_notify_interval sec until duration passed or stop is called)
 	instance.continuous_notify_interval = 0.5 -- How often to update when continuous is active
 	instance.continuous_notify_till = nil -- Seconds since epoch time when notify should be auto hidden. nil=no auto-hide
@@ -858,7 +844,7 @@ end
 function awesompd:show_notification(hint_title, hint_text, hint_image)
    self:hide_notification()
    self.notification = naughty.notify({ title      =  hint_title
-					, text       = awesompd.protect_string(hint_text)
+				, text       = awesompd.protect_string(hint_text)
 					, timeout    = 5
 					, position   = "top_right"
                                         , icon       = hint_image
@@ -994,6 +980,11 @@ function awesompd:notify_disconnect()
 		 " on port " .. self.servers[self.current_server].port)
 end
 
+local function to_seconds(minsec)
+   local min, sec = minsec:match("(%d+):(%d+)")
+   return tonumber(min) * 60 + tonumber(sec)
+end
+
 function awesompd:update_track(file)
    local file_exists = (file ~= nil)
    if not file_exists then
@@ -1078,11 +1069,7 @@ function awesompd:update_track(file)
             end
 	 end
 	 local tmp_pst = string.find(status_line,"%d+%:%d+%/")
-	 local tmp_playtime = string.match(status_line,"%d+%:%d+%/%d+%:%d+")
-	 local tmp_pos = string.match(tmp_playtime,"%d+%:%d+%/")
-	 self.track_position = string.match(tmp_pos,"%d+%:%d+")
-	 local tmp_dur = string.match(tmp_playtime,"%/%d+%:%d+")
-	 self.track_duration = string.match(tmp_dur,"%d+%:%d+")
+	 self.track_position, self.track_duration = status_line:match("(%d+:%d+)/(%d+:%d+)")
 	 local progress = self.find_pattern(status_line,"%#%d+/%d+") .. " " .. string.sub(status_line,tmp_pst)
          local new_status = awesompd.PLAYING
 	 if string.find(status_line,"paused") then
@@ -1099,27 +1086,35 @@ function awesompd:update_track(file)
    end
    self:smart_update()
 end
+
 function awesompd:smart_update()
-   -- NOTE OneTime Timer. Perhaps there is another way to do this 
-   -- FIXME timer:stop should not be called if a timer isn't active
-   -- else logs fill up with 'W timer not started' messages
-	self.smart_update_timer:stop()
-	if (self.status == awesompd.PLAYING) then
-		local pos = awesompd.minsec_to_sec(self.track_position)
-		local dur = awesompd.minsec_to_sec(self.track_duration)
-		local rem = dur - pos
-		if (rem <= self.update_interval) then
-			if (rem >= 1) then -- Little time remaining, lets update when it runs out
-				self.smart_update_timer = timer({ timeout = rem })
-			else -- careful of rem 0
-				self.smart_update_timer = timer({ timeout = 1 })
-			end
-			self.smart_update_timer:connect_signal("timeout", function() -- Update at predicted time
-					self:update_track()
-				end)
-			self.smart_update_timer:start()
-		end
-	end
+   -- Kill any set timers
+   if self.smart_update_timer.started then
+      self.smart_update_timer:stop()
+   end
+   if (self.status == awesompd.PLAYING) then
+      local pos = to_seconds(self.track_position)
+      local dur = to_seconds(self.track_duration)
+      local rem = dur - pos
+      if (rem <= self.update_interval) then
+	 -- Little time remaining, lets update when it runs out 
+	 if (rem < 1) then -- Careful of rem 0
+	    rem = 0.5
+	 end
+	 if scheduler then
+	    schedular.execute_once(rem, self:update_track())
+	 else
+	    local smart_timer = timer({ timeout = rem })
+	    smart_timer:connect_signal("timeout", function()
+	       print("TRYING SMART UPDATE" .. os.time() )
+	       smart_timer:stop()
+	       self:update_track()
+	    end)
+	    self.smart_update_timer = smart_timer
+	    smart_timer:start()
+	 end
+      end
+   end
 end
 
 function awesompd:update_state(state_string)
