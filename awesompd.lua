@@ -1084,9 +1084,12 @@ end
 -- used.
 function awesompd.protect_string(str, for_menu)
    if for_menu then
-      return utf8.replace(str, awesompd.ESCAPE_MENU_SYMBOL_MAPPING)
+--      return utf8.replace(str, awesompd.ESCAPE_MENU_SYMBOL_MAPPING)
+	  return awful.util.escape(str)
+
    else
-      return utf8.replace(str, awesompd.ESCAPE_SYMBOL_MAPPING)
+--	  return utf8.replace(str, awesompd.ESCAPE_SYMBOL_MAPPING)
+	  return awful.util.escape(str)
    end
 end
 
