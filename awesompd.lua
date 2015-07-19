@@ -214,27 +214,27 @@ function awesompd:create()
    instance.track_duration = "00:00"
    instance.smart_update_timer = timer({ timeout = instance.update_interval })
 -- Continuous Notify (updates notify every continuous_notify_interval sec until duration passed or stop is called)
-	instance.continuous_notify_interval = 0.5 -- How often to update when continuous is active
-	instance.continuous_notify_till = nil -- Seconds since epoch time when notify should be auto hidden. nil=no auto-hide
-	instance.continuous_notify_timer = timer({ timeout = instance.continuous_notify_interval })
-	instance.continuous_notify_timer:connect_signal("timeout", function()
-											instance:update_track()
-											instance:notify_track()
-											if (instance.continuous_notify_till) then
-												if (instance.continuous_notify_till <= os.time() ) then
-													instance:continuous_notify_stop()
-												end
-											end
-										end)
-	-- When to stop notifying, epoch
-	-- awesompd widget mouse hover.
--- Widget configuration
+   instance.continuous_notify_interval = 0.5 -- How often to update when continuous is active
+   instance.continuous_notify_till = nil -- Seconds since epoch time when notify should be auto hidden. nil=no auto-hide
+   instance.continuous_notify_timer = timer({ timeout = instance.continuous_notify_interval })
+   instance.continuous_notify_timer:connect_signal("timeout", function()
+      instance:update_track()
+      instance:notify_track()
+      if (instance.continuous_notify_till) then
+	 if (instance.continuous_notify_till <= os.time() ) then
+	    instance:continuous_notify_stop()
+	 end
+      end
+   end)
+   -- When to stop notifying, epoch
+   -- awesompd widget mouse hover.
+   -- Widget configuration
    instance.widget:connect_signal("mouse::enter", function(c)
-		instance:continuous_notify_start()
-	end)
+      instance:continuous_notify_start()
+   end)
    instance.widget:connect_signal("mouse::leave", function(c)
-		instance:continuous_notify_stop()
-	end)
+      instance:continuous_notify_stop()
+   end)
    return instance
 end
 
@@ -872,24 +872,19 @@ function awesompd:notify_track()
    end
 end
 function awesompd:continuous_notify_start(duration)
-	self:update_track()
-	self:notify_track()
---	if scheduler then -- I dont understand/use scheduler
---		scheduler.register_recurring("awesompd_continuous_notify", instance.continuous_notify_interval,
---								function() instance:notify_track() end)
---	else
-		if duration then
-			self.continuous_notify_till = os.time() + duration
-		else -- You could set a default limit here, perhaps 60 sec, in case of an error like mouse::leave not sending.
-			self.continuous_notify_till = nil
-		end
-		self.continuous_notify_timer:start()
---	end
+   self:update_track()
+   self:notify_track()
+   if duration then
+      self.continuous_notify_till = os.time() + duration
+   else -- You could set a default limit here, perhaps 60 sec.
+      self.continuous_notify_till = nil
+   end
+   self.continuous_notify_timer:start()
 end
 
 function awesompd:continuous_notify_stop()
-	self.continuous_notify_timer:stop()
-	self:hide_notification()
+   self.continuous_notify_timer:stop()
+   self:hide_notification()
 end
 
 function awesompd:notify_state(state_changed)
@@ -965,7 +960,7 @@ end
 function awesompd:check_notify()
    if self.to_notify then
 --      self:notify_track()
-		self:continuous_notify_start(5)
+      self:continuous_notify_start(5)
       self.to_notify = false
    end
 end
