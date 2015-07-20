@@ -201,7 +201,7 @@ function awesompd:create()
    instance.background = beautiful.bg_normal
    instance.scrolling = true
    instance.output_size = 30
-   instance.update_interval = 60
+   instance.update_interval = 10
    instance.path_to_icons = ""
    instance.ldecorator = " "
    instance.rdecorator = " "
@@ -1101,7 +1101,6 @@ function awesompd:smart_update()
 	 else
 	    local smart_timer = timer({ timeout = rem })
 	    smart_timer:connect_signal("timeout", function()
-	       print("TRYING SMART UPDATE" .. os.time() )
 	       smart_timer:stop()
 	       self:update_track()
 	    end)
