@@ -382,6 +382,22 @@ function awesompd:command_play_specific(n)
              self:command("play " .. n,self.update_track)
           end
 end
+function awesompd:command_play()
+   return function()
+             self:command("play", self.update_track)
+          end
+end
+function awesompd:command_pause()
+   return function()
+             self:command("pause", self.update_track)
+          end
+end
+function awesompd:command_pause_after()
+   return function()
+             os.execute(self:mpcquery() .. " -w current && "
+	       .. self:mpcquery() .. " pause &")
+          end
+end
 
 function awesompd:command_volume_up()
    return function()
@@ -1090,23 +1106,16 @@ function awesompd:smart_update()
    if (self.status == awesompd.PLAYING) then
       local pos = to_seconds(self.track_position)
       local dur = to_seconds(self.track_duration)
-      local rem = dur - pos
+      local rem = (dur - pos) + 0.5
       if (rem <= self.update_interval) then
 	 -- Little time remaining, lets update when it runs out 
-	 if (rem < 1) then -- Careful of rem 0
-	    rem = 0.5
-	 end
-	 if scheduler then
-	    schedular.execute_once(rem, self:update_track())
-	 else
-	    local smart_timer = timer({ timeout = rem })
-	    smart_timer:connect_signal("timeout", function()
-	       smart_timer:stop()
-	       self:update_track()
-	    end)
-	    self.smart_update_timer = smart_timer
-	    smart_timer:start()
-	 end
+	 local smart_timer = timer({ timeout = rem })
+	 smart_timer:connect_signal("timeout", function()
+	    smart_timer:stop()
+	    self:update_track()
+	 end)
+	 self.smart_update_timer = smart_timer
+	 smart_timer:start()
       end
    end
 end
@@ -1292,3 +1301,4 @@ function awesompd:command_toggle()
 end
 
 return awesompd
+-- vim: set tabstop=8 softtabstop=3 shiftwidth=3:
