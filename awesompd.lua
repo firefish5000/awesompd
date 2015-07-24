@@ -14,6 +14,7 @@ local module_path = (...):match ("(.+/)[^/]+$") or ""
 
 local awesompd = {}
 
+
 -- Function for checking icons and modules. Checks if a file exists,
 -- and if it does, returns the path to file, nil otherwise.
 function awesompd.try_load(file)
@@ -162,6 +163,11 @@ function awesompd.load_icons(path)
    awesompd.ICONS.RADIO = awesompd.try_load(path .. "/radio_icon.png")
    awesompd.ICONS.DEFAULT_ALBUM_COVER = 
       awesompd.try_load(path .. "/default_album_cover.png")
+   awesompd.ICONS.PLAY_BTN = awesompd.try_load(path .. "/play_btn.png")
+   awesompd.ICONS.PAUSE_BTN = awesompd.try_load(path .. "/pause_btn.png")
+   awesompd.ICONS.STOP_BTN = awesompd.try_load(path .. "/stop_btn.png")
+   awesompd.ICONS.NEXT_BTN = awesompd.try_load(path .. "/next_btn.png")
+   awesompd.ICONS.PREV_BTN = awesompd.try_load(path .. "/prev_btn.png")
 end
 
 -- Function that returns a new awesompd object.
@@ -210,8 +216,8 @@ function awesompd:create()
    instance.album_cover_size = 50
    instance.browser = "firefox"
 -- Smart Update (sets timer to check/update widget near when the current track should end)
-   instance.track_position = "00:00"
-   instance.track_duration = "00:00"
+   instance.track_passed = 0
+   instance.track_duration = 0
    instance.smart_update_timer = timer({ timeout = instance.update_interval })
 -- Continuous Notify (updates notify every continuous_notify_interval sec until duration passed or stop is called)
    instance.continuous_notify_interval = 0.5 -- How often to update when continuous is active
@@ -329,7 +335,7 @@ function awesompd:mpcquery(human_readable)
    if human_readable then
       return result
    else
-      return result ..' -f "%file%-<>-%name%-<>-%title%-<>-%artist%-<>-%album%" '
+      return result ..' -f "%file%-<>-%name%-<>-%title%-<>-%artist%-<>-%album%-<>-%date%" '
    end
 end
 
@@ -860,7 +866,7 @@ end
 function awesompd:show_notification(hint_title, hint_text, hint_image)
    self:hide_notification()
    self.notification = naughty.notify({ title      =  hint_title
-				, text       = awesompd.protect_string(hint_text)
+					, text       = awesompd.protect_string(hint_text)
 					, timeout    = 5
 					, position   = "top_right"
                                         , icon       = hint_image
@@ -919,8 +925,8 @@ function awesompd:notify_state(state_changed)
 end
 
 function awesompd:wrap_output(text)
-   return format('<span font="%s" color="%s" background="%s">%s%s%s</span>',
-                 self.font, self.font_color, self.background,
+   return format('<span font="%s" color="%s">%s%s%s</span>',
+                 self.font, self.font_color,
                  (text == "" and "" or self.ldecorator), awesompd.protect_string(text),
                  (text == "" and "" or self.rdecorator))
 end
@@ -996,6 +1002,12 @@ local function to_seconds(minsec)
    return tonumber(min) * 60 + tonumber(sec)
 end
 
+local function to_minsec(seconds)
+   local min = math.floor(seconds / 60)
+   local sec = seconds % 60
+   return string.format("%s:%s%s", min, (sec < 10) and "0" or "", sec)
+end
+
 function awesompd:update_track(file)
    local file_exists = (file ~= nil)
    if not file_exists then
@@ -1015,12 +1027,18 @@ function awesompd:update_track(file)
          self.status = awesompd.DISCONNECTED
          self.current_track = { }
          self:update_widget_text()
+         if self.onscreen then
+            self.onscreen.clear()
+         end
       end
    else
       if self.status == awesompd.DISCONNECTED then
 	 self:notify_connect()
 	 self.recreate_menu = true
          self:update_widget_text()
+         if self.onscreen then
+            self.onscreen.clear()
+         end
       end
       if string.find(track_line,"volume:") or string.find(track_line,"Updating DB") then
 	 if self.status ~= awesompd.STOPPED then
@@ -1034,10 +1052,14 @@ function awesompd:update_track(file)
             self:update_widget_text()
 	 end
          self:update_state(track_line)
+         if self.onscreen then
+            self.onscreen.clear()
+         end
+
       else
          self:update_state(options_line)
-         local _, _, new_file, station, title, artist, album =
-            string.find(track_line, "(.*)%-<>%-(.*)%-<>%-(.*)%-<>%-(.*)%-<>%-(.*)")
+         local _, _, new_file, station, title, artist, album, year =
+            string.find(track_line, "(.*)%-<>%-(.*)%-<>%-(.*)%-<>%-(.*)%-<>%-(.*)%-<>%-(.*)")
          local display_name, force_update = artist .. " - " .. title, false
          -- The following code checks if the current track is an
          -- Internet link. Internet radios change tracks, but the
@@ -1056,7 +1078,8 @@ function awesompd:update_track(file)
             self.current_track = jamendo.get_track_by_link(new_file)
             if not self.current_track then
                self.current_track = { display_name = display_name,
-                                      album_name = album }
+                                      album_name = album,
+                                      year = year }
             end
             self.current_track.unique_name = new_file
             if self.show_album_cover then
@@ -1079,11 +1102,16 @@ function awesompd:update_track(file)
                jamendo.try_get_cover_async(next_track)
             end
 	 end
-	 local tmp_pst = string.find(status_line,"%d+%:%d+%/")
-	 self.track_position, self.track_duration = status_line:match("(%d+:%d+)/(%d+:%d+)")
-	 local progress = self.find_pattern(status_line,"%#%d+/%d+") .. " " .. string.sub(status_line,tmp_pst)
+
+         local status, track_n_count, time_passed, track_duration, track_progress =
+            status_line:match("%[(%w+)%]%s+(%#%d+/%d+)%s+(%d+:%d+)/(%d+:%d+)%s+%((%d+)%%%)")
+         self.track_n_count = track_n_count
+         self.track_passed = to_seconds(time_passed)
+         self.track_progress = tonumber(track_progress)
+         self.current_track.duration = to_seconds(track_duration)
+
          local new_status = awesompd.PLAYING
-	 if string.find(status_line,"paused") then
+	 if status:match("paused") then
             new_status = awesompd.PAUSED
 	 end
 	 if new_status ~= self.status then
@@ -1092,7 +1120,12 @@ function awesompd:update_track(file)
             self.status = new_status
             self:update_widget_text()
 	 end
-	 self.status_text = self.status .. " " .. progress
+	 self.status_text =
+            string.format("%s %s %s/%s (%s%%)", self.status, track_n_count,
+                          time_passed, track_duration, track_progress)
+         if self.onscreen then
+            self.onscreen.update()
+         end
       end
    end
    self:smart_update()
@@ -1104,8 +1137,8 @@ function awesompd:smart_update()
       self.smart_update_timer:stop()
    end
    if (self.status == awesompd.PLAYING) then
-      local pos = to_seconds(self.track_position)
-      local dur = to_seconds(self.track_duration)
+      local pos = self.track_passed
+      local dur = self.track_duration
       local rem = (dur - pos) + 1
       if (rem < self.update_interval) then
 	 -- Little time remaining, lets update when it runs out 
@@ -1163,6 +1196,13 @@ end
 -- used.
 function awesompd.protect_string(str, for_menu)
 	  return awful.util.escape(str)
+end
+function awesompd.protect_strings(...)
+	local str = {}
+	for i,s in ipairs(arg) do
+		str[i] = awful.util.escape(s)
+	end
+	return unpack(str)
 end
 
 -- Initialize the inputbox.
@@ -1291,6 +1331,161 @@ function awesompd:try_get_local_cover(current_file)
       end
       return result
    end   
+end
+
+-- /// Onscreen widget functions ///
+
+function awesompd:init_onscreen_widget(args)
+   -- Originally written by TODD from linux.org.ru.
+   self.onscreen = {}
+   local args = args or {}
+   local scr = args.screen or 1
+   local scrgeom = screen[scr].geometry -- workarea
+   local cover_size = args.cover_size or 110
+   local cover_shift_left = 10
+   local width = cover_size + 300
+   local height = 90
+   local x = args.x or 20
+   local y = args.y or -20
+   local font = args.font or beautiful.font or "sans 8"
+
+   if x >= 0 then
+      x = scrgeom.x + x
+   else
+      x = scrgeom.x + scrgeom.width + x - width
+   end
+
+   if y >= 0 then
+      y = scrgeom.y + y
+   else
+      y = scrgeom.y + scrgeom.height + y - height
+   end
+
+   local cover_wb = wibox({ width = cover_size,
+                            height = cover_size,
+                            x = x + cover_shift_left,
+                            y = y - cover_size/2 + height/2,
+                            visible = false,
+                          })
+   local cover_img = wibox.widget.imagebox()
+   cover_wb:set_widget(cover_img)
+
+   local top_layout = wibox.layout.fixed.horizontal()
+   local ver_layout = wibox.layout.fixed.vertical()
+   local buttons_layout = wibox.layout.fixed.horizontal()
+   local bottom_layout = wibox.layout.align.horizontal()
+   top_layout:add(wibox.layout.constraint(nil, "exact", cover_size + cover_shift_left + 10, height))
+   top_layout:add(ver_layout)
+
+   local track_text = wibox.widget.textbox()
+   track_text:set_valign("center")
+
+   local track_prbar = awful.widget.progressbar({ height = 5 })
+   track_prbar:set_border_color(args.prbar_border_color or "#444444")
+   track_prbar:set_background_color(args.prbar_bg_color or "#444444")
+   track_prbar:set_color(args.prbar_fg_color or "#aaaaaa")
+   track_prbar:set_max_value(100)
+
+   local v_margin = 6
+   local with_margins = wibox.layout.margin
+   ver_layout:add(with_margins(track_text, 0, 0, v_margin, 0))
+   ver_layout:add(with_margins(track_prbar, 0, 10, v_margin, 0))
+   ver_layout:add(with_margins(bottom_layout, 0, 0, v_margin, 0))
+
+   local status_text = wibox.widget.textbox()
+   status_text:set_align("right")
+
+   local function make_button(image, callback)
+      local box = wibox.widget.imagebox(image, false)
+      box:buttons(awful.util.table.join(awful.button({}, 1, callback)))
+      return box
+   end
+
+   buttons_layout:add(with_margins(make_button(self.ICONS.PREV_BTN, function ()
+                                                  self:command_prev_track()()
+                                              end),
+                                   0, v_margin, 0, 0))
+   local pp_button = make_button(self.ICONS.PLAY_BTN, self:command_playpause())
+   buttons_layout:add(with_margins(pp_button, 0, v_margin, 0, 0))
+   buttons_layout:add(with_margins(make_button(self.ICONS.STOP_BTN, self:command_stop()),
+                                   0, v_margin, 0, 0))
+   buttons_layout:add(with_margins(make_button(self.ICONS.NEXT_BTN, self:command_next_track()),
+                                   0, v_margin, 0, 0))
+
+   bottom_layout:set_left(buttons_layout)
+   bottom_layout:set_right(with_margins(status_text, 0, 10, 0, 0))
+
+   local player_wb = wibox({ bg = args.color or beautiful.bg_normal,
+                             height = height,
+                             width = width,
+                             x = x, y = y,
+                             screen = scr,
+                             visible = false,
+                           })
+   player_wb:set_widget(top_layout)
+
+   function self.onscreen.clear()
+      self.execute_once(1, function ()
+                                player_wb.visible = false
+                                self.execute_once(1, function ()
+                                                          cover_wb.visible = false
+                                                          end)
+                                end)
+   end
+
+   function self.onscreen.update()
+      local title = self.current_track.display_name
+      local year = self.current_track.year
+      if year then
+         year = " (" .. year .. ")"
+      end
+      local album = self.current_track.album_name .. year
+
+      local trim = function (s)
+         local l = utf8.len(s)
+         if l > 40 then
+            return "..." .. utf8.sub(s, l - 38)
+         else
+            return s
+         end
+      end
+
+      track_text:set_markup(
+         string.format("<span font='%s'>%s\n%s</span>", font,
+			awesompd.protect_strings(trim(title), trim(album))))
+      status_text:set_markup(
+         string.format("<span font='%s'>%s %s/%s</span>", font,
+			awesompd.protect_strings(self.track_n_count,
+                                               to_minsec(self.track_passed),
+                                               to_minsec(self.current_track.duration))))
+      cover_img:set_image(self.current_track.album_cover)
+      track_prbar:set_value(self.track_progress)
+      if self.status == awesompd.PLAYING then
+         pp_button:set_image(self.ICONS.PAUSE_BTN)
+      elseif self.status == awesompd.PAUSED then
+         pp_button:set_image(self.ICONS.PLAY_BTN)
+      end
+      self.execute_once(1, function ()
+                                player_wb.visible = true
+                                self.execute_once(1, function ()
+                                                          cover_wb.visible = true
+                                                          end)
+                                end)
+   end
+
+   self.onscreen.clear()
+end
+
+function awesompd.execute_once(delay, func)
+
+   local t = timer({ timeout = delay })
+   t:connect_signal("timeout",
+                    function()
+                       t:stop()
+                       func()
+                    end)
+   t:start()
+   return t
 end
 
 -- /// Deprecated, left for some backward compatibility in
