@@ -218,13 +218,16 @@ function awesompd:create()
 -- Smart Update (sets timer to check/update widget near when the current track should end)
    instance.track_passed = 0
    instance.track_duration = 0
+   instance.calc_track_passed = 0
+   instance.calc_track_progress = 0
    instance.smart_update_timer = timer({ timeout = instance.update_interval })
 -- Continuous Notify (updates notify every continuous_notify_interval sec until duration passed or stop is called)
    instance.continuous_notify_interval = 0.5 -- How often to update when continuous is active
    instance.continuous_notify_till = nil -- Seconds since epoch time when notify should be auto hidden. nil=no auto-hide
    instance.continuous_notify_timer = timer({ timeout = instance.continuous_notify_interval })
    instance.continuous_notify_timer:connect_signal("timeout", function()
-      instance:update_track()
+      --instance:update_track()
+      instance:recalculate_track()
       instance:notify_track()
       if (instance.continuous_notify_till) then
 	 if (instance.continuous_notify_till <= os.time() ) then
@@ -964,7 +967,11 @@ end
 
 -- This function is called every second.
 function awesompd:update_widget()
+   self:recalculate_track()
    self:set_text(self:scroll_text(self.text))
+   if self.onscreen then
+       self.onscreen.update()
+   end
    self:check_notify()
 end
 
@@ -1013,6 +1020,7 @@ function awesompd:update_track(file)
    if not file_exists then
       file = io.popen(self:mpcquery())
    end
+   self.track_update_time = os.time()
    local track_line = file:read("*line")
    local status_line = file:read("*line")
    local options_line = file:read("*line")
@@ -1109,6 +1117,7 @@ function awesompd:update_track(file)
          self.track_passed = to_seconds(time_passed)
          self.track_progress = tonumber(track_progress)
          self.current_track.duration = to_seconds(track_duration)
+         self.track_duration = to_seconds(track_duration)
 
          local new_status = awesompd.PLAYING
 	 if status:match("paused") then
@@ -1131,6 +1140,19 @@ function awesompd:update_track(file)
    self:smart_update()
 end
 
+function awesompd:recalculate_track()
+   local diff = os.time() - self.track_update_time
+   local cur_passed = self.track_passed + diff
+   if cur_passed > self.track_duration then cur_passed = self.track_duration end
+   local cur_prog = math.floor( ((cur_passed/self.track_duration) * 100) + 0.5)
+   self.calc_track_passed = cur_passed
+   self.calc_track_progress = cur_prog
+   self.status_text = string.format("%s %s %s/%s (%s%%)",
+			   awesompd.protect_strings(self.status, self.track_n_count,
+			      to_minsec(self.calc_track_passed),
+			      to_minsec(self.current_track.duration),
+			      tostring(self.calc_track_progress)))
+end
 function awesompd:smart_update()
    -- Kill any set timers
    if self.smart_update_timer.started then
@@ -1456,10 +1478,10 @@ function awesompd:init_onscreen_widget(args)
       status_text:set_markup(
          string.format("<span font='%s'>%s %s/%s</span>", font,
 			awesompd.protect_strings(self.track_n_count,
-                                               to_minsec(self.track_passed),
+                                               to_minsec(self.calc_track_passed),
                                                to_minsec(self.current_track.duration))))
       cover_img:set_image(self.current_track.album_cover)
-      track_prbar:set_value(self.track_progress)
+      track_prbar:set_value(self.calc_track_progress)
       if self.status == awesompd.PLAYING then
          pp_button:set_image(self.ICONS.PAUSE_BTN)
       elseif self.status == awesompd.PAUSED then
