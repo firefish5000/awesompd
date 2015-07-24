@@ -1106,8 +1106,8 @@ function awesompd:smart_update()
    if (self.status == awesompd.PLAYING) then
       local pos = to_seconds(self.track_position)
       local dur = to_seconds(self.track_duration)
-      local rem = (dur - pos) + 0.5
-      if (rem <= self.update_interval) then
+      local rem = (dur - pos) + 1
+      if (rem < self.update_interval) then
 	 -- Little time remaining, lets update when it runs out 
 	 local smart_timer = timer({ timeout = rem })
 	 smart_timer:connect_signal("timeout", function()
