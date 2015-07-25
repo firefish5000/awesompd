@@ -216,6 +216,7 @@ function awesompd:create()
    instance.album_cover_size = 50
    instance.browser = "firefox"
 -- Smart Update (sets timer to check/update widget near when the current track should end)
+   instance.async_idle_lock = 0
    instance.track_passed = 0
    instance.track_duration = 0
    instance.calc_track_passed = 0
@@ -1138,6 +1139,7 @@ function awesompd:update_track(file)
       end
    end
    self:smart_update()
+   awesompd:idle_update()
 end
 
 function awesompd:recalculate_track()
@@ -1150,8 +1152,18 @@ function awesompd:recalculate_track()
    self.status_text = string.format("%s %s %s/%s (%s%%)",
 			   awesompd.protect_strings(self.status, self.track_n_count,
 			      to_minsec(self.calc_track_passed),
-			      to_minsec(self.current_track.duration),
+			      to_minsec(self.track_duration),
 			      tostring(self.calc_track_progress)))
+end
+function awesompd:idle_update()
+   if self.async_idle_lock == 0 then
+      self.async_idle_lock = 1
+      asyncshell.request('mpc idle', function(f)
+	 naughty.notify({timeout=1000,title = "Idle Update!",text = "An mpc Idle Update Notify" }); 
+         awesompd:update_track()
+         awesompd.async_idle_lock = 0
+      end)
+   end
 end
 function awesompd:smart_update()
    -- Kill any set timers
@@ -1479,7 +1491,7 @@ function awesompd:init_onscreen_widget(args)
          string.format("<span font='%s'>%s %s/%s</span>", font,
 			awesompd.protect_strings(self.track_n_count,
                                                to_minsec(self.calc_track_passed),
-                                               to_minsec(self.current_track.duration))))
+                                               to_minsec(self.track_duration))))
       cover_img:set_image(self.current_track.album_cover)
       track_prbar:set_value(self.calc_track_progress)
       if self.status == awesompd.PLAYING then
