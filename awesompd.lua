@@ -209,10 +209,14 @@ function awesompd:create()
    instance.show_album_cover = true
    instance.album_cover_size = 50
    instance.browser = "firefox"
--- Smart Update (sets timer to check/update widget near when the current track should end)
-   instance.track_position = "00:00"
-   instance.track_duration = "00:00"
-   instance.smart_update_timer = timer({ timeout = instance.update_interval })
+-- Recalculate_track (all times are in seconds)
+   instance.track_update_time = 0
+   instance.track_passed = 0
+   instance.track_duration = 0
+   instance.calc_track_passed = 0
+   instance.calc_track_progress = 0
+-- Idle Update Lock
+   instance.async_idle_lock = 0
    -- Widget configuration
    instance.widget:connect_signal("mouse::enter", function(c)
 	    instance:update_track()
@@ -847,6 +851,7 @@ end
 
 function awesompd:notify_track()
    if self:playing_or_paused() then
+      self:recalculate_track()
       local caption = self.status_text
       local nf_text = self.get_display_name(self.current_track)
       local al_cover = nil
@@ -950,11 +955,18 @@ local function to_seconds(minsec)
    return tonumber(min) * 60 + tonumber(sec)
 end
 
+local function to_minsec(seconds)
+   local min = math.floor(seconds / 60)
+   local sec = seconds % 60
+   return string.format("%s:%s%s", min, (sec < 10) and "0" or "", sec)
+end
+
 function awesompd:update_track(file)
    local file_exists = (file ~= nil)
    if not file_exists then
       file = io.popen(self:mpcquery())
    end
+   self.track_update_time = os.time()
    local track_line = file:read("*line")
    local status_line = file:read("*line")
    local options_line = file:read("*line")
@@ -1033,9 +1045,15 @@ function awesompd:update_track(file)
                jamendo.try_get_cover_async(next_track)
             end
 	 end
-	 local tmp_pst = string.find(status_line,"%d+%:%d+%/")
-	 self.track_position, self.track_duration = status_line:match("(%d+:%d+)/(%d+:%d+)")
-	 local progress = self.find_pattern(status_line,"%#%d+/%d+") .. " " .. string.sub(status_line,tmp_pst)
+
+         local status, track_n_count, time_passed, track_duration, track_progress =
+            status_line:match("%[(%w+)%]%s+(%#%d+/%d+)%s+(%d+:%d+)/(%d+:%d+)%s+%((%d+)%%%)")
+         self.track_n_count = track_n_count
+         self.track_passed = to_seconds(time_passed)
+         self.track_progress = tonumber(track_progress)
+         self.current_track.duration = to_seconds(track_duration)
+         self.track_duration = to_seconds(track_duration)
+
          local new_status = awesompd.PLAYING
 	 if string.find(status_line,"paused") then
             new_status = awesompd.PAUSED
@@ -1046,31 +1064,41 @@ function awesompd:update_track(file)
             self.status = new_status
             self:update_widget_text()
 	 end
-	 self.status_text = self.status .. " " .. progress
+	 self.status_text =
+            string.format("%s %s %s/%s (%s%%)", self.status, track_n_count,
+                          time_passed, track_duration, track_progress)
       end
    end
-   self:smart_update()
+   self:idle_update()
 end
 
-function awesompd:smart_update()
-   -- Kill any set timers
-   if self.smart_update_timer.started then
-      self.smart_update_timer:stop()
+function awesompd:recalculate_track()
+   if self.status == awesompd.PLAYING then
+      local diff = os.time() - self.track_update_time
+      local cur_passed = self.track_passed + diff
+      if cur_passed > self.track_duration then cur_passed = self.track_duration end
+      local cur_prog = math.floor( ((cur_passed/self.track_duration) * 100) + 0.5)
+      self.calc_track_passed = cur_passed
+      self.calc_track_progress = cur_prog
+      self.status_text = string.format("%s %s %s/%s (%s%%)",
+		self.status, self.track_n_count,
+	    to_minsec(self.calc_track_passed),
+	    to_minsec(self.track_duration),
+	    tostring(self.calc_track_progress))
+   elseif self.status == awesompd.PAUSED then
+      self.calc_track_passed = self.track_passed
+      self.calc_track_progress = self.track_progress
    end
-   if (self.status == awesompd.PLAYING) then
-      local pos = to_seconds(self.track_position)
-      local dur = to_seconds(self.track_duration)
-      local rem = (dur - pos) + 1
-      if (rem < self.update_interval) then
-	 -- Little time remaining, lets update when it runs out 
-	 local smart_timer = timer({ timeout = rem })
-	 smart_timer:connect_signal("timeout", function()
-	    smart_timer:stop()
-	    self:update_track()
-	 end)
-	 self.smart_update_timer = smart_timer
-	 smart_timer:start()
-      end
+end
+
+function awesompd:idle_update()
+   -- TODO Ensure this doesn't have a race condition.
+   if self.async_idle_lock == 0 then
+      self.async_idle_lock = 1
+      asyncshell.request('mpc idle', function(f)
+         self.async_idle_lock = 0
+         self:update_track()
+      end)
    end
 end
 
