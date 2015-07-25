@@ -270,13 +270,17 @@ function awesompd:run()
 
    if scheduler then
       scheduler.register_recurring("awesompd_scroll", 1,
-                                   function() self:update_widget() end)
+                                   function()
+				      self:update_widget()
+				      self.scroll_pos = self.scroll_pos + 1
+				   end)
       scheduler.register_recurring("awesompd_update", self.update_interval,
                                    function() self:update_track() end)
    else
       self.update_widget_timer = timer({ timeout = 1 })
       self.update_widget_timer:connect_signal("timeout", function()
                                                  self:update_widget()
+						 self.scroll_pos = self.scroll_pos + 1
                                                          end)
       self.update_widget_timer:start()
       self.update_track_timer = timer({ timeout = self.update_interval })
@@ -946,21 +950,25 @@ function awesompd.find_pattern(text, pattern, start)
 end
 
 -- Scroll the given text by the current number of symbols.
-function awesompd:scroll_text(text)
+function awesompd:scroll_text(text, max_size)
+   if self.scroll_pos > 86400 then
+      self.scroll_pos = 0
+   end
+   local max_size = max_size or self.output_size
    local result = text
+   local text_len = utf8.len(text)
+   local text_pos = self.scroll_pos % text_len
    if self.scrolling then
-      if self.output_size < utf8.len(text) then
+      if max_size < text_len then
          text = text .. " - "
-         if self.scroll_pos + self.output_size - 1 > utf8.len(text) then
-            result = utf8.sub(text, self.scroll_pos)
-            result = result .. utf8.sub(text, 1, self.scroll_pos + self.output_size - 1 - utf8.len(text))
-            self.scroll_pos = self.scroll_pos + 1
-            if self.scroll_pos > utf8.len(text) then
-               self.scroll_pos = 1
-            end
+         if text_pos + max_size - 1 > text_len then
+            result = utf8.sub(text, text_pos)
+            result = result .. utf8.sub(text, 1, text_pos + max_size - 1 - text_len)
+            -- self.scroll_pos = self.scroll_pos + 1
+	    --reset scroll_pos every day
          else
-            result = utf8.sub(text, self.scroll_pos, self.scroll_pos + self.output_size - 1)
-            self.scroll_pos = self.scroll_pos + 1
+            result = utf8.sub(text, text_pos, text_pos + max_size - 1)
+            --self.scroll_pos = self.scroll_pos + 1
          end
       end
    end
@@ -1169,6 +1177,7 @@ function awesompd:idle_update()
       asyncshell.request('mpc idle', function(f)
          self.async_idle_lock = 0
          self:update_track()
+	 self.scroll_pos=0
       end)
    end
 end
@@ -1486,7 +1495,8 @@ function awesompd:init_onscreen_widget(args)
       local trim = function (s)
          local l = utf8.len(s)
          if l > 40 then
-            return "..." .. utf8.sub(s, l - 38)
+            --return "..." .. utf8.sub(s, l - 38)
+            return self:scroll_text(s, 40)
          else
             return s
          end
