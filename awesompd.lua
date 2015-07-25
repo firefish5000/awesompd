@@ -207,7 +207,7 @@ function awesompd:create()
    instance.background = beautiful.bg_normal
    instance.scrolling = true
    instance.output_size = 30
-   instance.update_interval = 10
+   instance.update_interval = 60
    instance.path_to_icons = ""
    instance.ldecorator = " "
    instance.rdecorator = " "
@@ -271,7 +271,8 @@ function awesompd:run()
       scheduler.register_recurring("awesompd_scroll", 1,
                                    function() self:update_widget() end)
       scheduler.register_recurring("awesompd_update", self.update_interval,
-                                   function() self:update_track() end)
+--                                   function() self:update_track() end)
+                                   function() return nil end)
    else
       self.update_widget_timer = timer({ timeout = 1 })
       self.update_widget_timer:connect_signal("timeout", function()
@@ -280,7 +281,7 @@ function awesompd:run()
       self.update_widget_timer:start()
       self.update_track_timer = timer({ timeout = self.update_interval })
       self.update_track_timer:connect_signal("timeout", function()
-                                                self:update_track()
+--                                                self:update_track()
                                                         end)
       self.update_track_timer:start()
    end
@@ -1138,8 +1139,8 @@ function awesompd:update_track(file)
          end
       end
    end
-   self:smart_update()
-   awesompd:idle_update()
+   self:idle_update()
+   --self:smart_update()
 end
 
 function awesompd:recalculate_track()
@@ -1156,12 +1157,13 @@ function awesompd:recalculate_track()
 			      tostring(self.calc_track_progress)))
 end
 function awesompd:idle_update()
+   -- TODO Ensure this doesn't have a race condition.
    if self.async_idle_lock == 0 then
       self.async_idle_lock = 1
       asyncshell.request('mpc idle', function(f)
-	 naughty.notify({timeout=1000,title = "Idle Update!",text = "An mpc Idle Update Notify" }); 
-         awesompd:update_track()
-         awesompd.async_idle_lock = 0
+	 local anot = naughty.notify({timeout=1000,title = "Idle Update!",text = "An mpc Idle Update Notify" });
+         self.async_idle_lock = 0
+         self:update_track()
       end)
    end
 end
