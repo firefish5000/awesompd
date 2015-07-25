@@ -215,13 +215,14 @@ function awesompd:create()
    instance.show_album_cover = true
    instance.album_cover_size = 50
    instance.browser = "firefox"
--- Smart Update (sets timer to check/update widget near when the current track should end)
-   instance.async_idle_lock = 0
+-- Recalculate_track (all times are in seconds)
+   instance.track_update_time = 0
    instance.track_passed = 0
    instance.track_duration = 0
    instance.calc_track_passed = 0
    instance.calc_track_progress = 0
-   instance.smart_update_timer = timer({ timeout = instance.update_interval })
+-- Idle Update Lock
+   instance.async_idle_lock = 0
 -- Continuous Notify (updates notify every continuous_notify_interval sec until duration passed or stop is called)
    instance.continuous_notify_interval = 0.5 -- How often to update when continuous is active
    instance.continuous_notify_till = nil -- Seconds since epoch time when notify should be auto hidden. nil=no auto-hide
