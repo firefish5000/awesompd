@@ -1144,17 +1144,22 @@ function awesompd:update_track(file)
 end
 
 function awesompd:recalculate_track()
-   local diff = os.time() - self.track_update_time
-   local cur_passed = self.track_passed + diff
-   if cur_passed > self.track_duration then cur_passed = self.track_duration end
-   local cur_prog = math.floor( ((cur_passed/self.track_duration) * 100) + 0.5)
-   self.calc_track_passed = cur_passed
-   self.calc_track_progress = cur_prog
-   self.status_text = string.format("%s %s %s/%s (%s%%)",
-			   awesompd.protect_strings(self.status, self.track_n_count,
-			      to_minsec(self.calc_track_passed),
-			      to_minsec(self.track_duration),
-			      tostring(self.calc_track_progress)))
+   if self.status == awesompd.PLAYING then
+      local diff = os.time() - self.track_update_time
+      local cur_passed = self.track_passed + diff
+      if cur_passed > self.track_duration then cur_passed = self.track_duration end
+      local cur_prog = math.floor( ((cur_passed/self.track_duration) * 100) + 0.5)
+      self.calc_track_passed = cur_passed
+      self.calc_track_progress = cur_prog
+      self.status_text = string.format("%s %s %s/%s (%s%%)",
+	 awesompd.protect_strings(self.status, self.track_n_count,
+	    to_minsec(self.calc_track_passed),
+	    to_minsec(self.track_duration),
+	    tostring(self.calc_track_progress)))
+   elseif self.status == awesompd.PAUSED then
+      self.calc_track_passed = self.track_passed
+      self.calc_track_progress = self.track_progress
+   end
 end
 
 function awesompd:idle_update()
