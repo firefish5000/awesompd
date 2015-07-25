@@ -271,8 +271,7 @@ function awesompd:run()
       scheduler.register_recurring("awesompd_scroll", 1,
                                    function() self:update_widget() end)
       scheduler.register_recurring("awesompd_update", self.update_interval,
---                                   function() self:update_track() end)
-                                   function() return nil end)
+                                   function() self:update_track() end)
    else
       self.update_widget_timer = timer({ timeout = 1 })
       self.update_widget_timer:connect_signal("timeout", function()
@@ -281,7 +280,7 @@ function awesompd:run()
       self.update_widget_timer:start()
       self.update_track_timer = timer({ timeout = self.update_interval })
       self.update_track_timer:connect_signal("timeout", function()
---                                                self:update_track()
+                                                self:update_track()
                                                         end)
       self.update_track_timer:start()
    end
@@ -1156,17 +1155,18 @@ function awesompd:recalculate_track()
 			      to_minsec(self.track_duration),
 			      tostring(self.calc_track_progress)))
 end
+
 function awesompd:idle_update()
    -- TODO Ensure this doesn't have a race condition.
    if self.async_idle_lock == 0 then
       self.async_idle_lock = 1
       asyncshell.request('mpc idle', function(f)
-	 local anot = naughty.notify({timeout=1000,title = "Idle Update!",text = "An mpc Idle Update Notify" });
          self.async_idle_lock = 0
          self:update_track()
       end)
    end
 end
+
 function awesompd:smart_update()
    -- Kill any set timers
    if self.smart_update_timer.started then
