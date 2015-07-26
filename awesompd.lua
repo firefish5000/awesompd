@@ -223,6 +223,7 @@ function awesompd:create()
    instance.calc_track_progress = 0
 -- Idle Update Lock
    instance.async_idle_lock = 0
+   instance.poll_update_track = 0
 -- Continuous Notify (updates notify every continuous_notify_interval sec until duration passed or stop is called)
    instance.continuous_notify_interval = 0.5 -- How often to update when continuous is active
    instance.continuous_notify_till = nil -- Seconds since epoch time when notify should be auto hidden. nil=no auto-hide
@@ -269,7 +270,7 @@ function awesompd:run()
    self:check_playlists()
 
    if scheduler then
-      scheduler.register_recurring("awesompd_scroll", 1,
+      scheduler.register_recurring("awesompd_scroll", 0.5,
                                    function()
 				      self:update_widget()
 				      self.scroll_pos = self.scroll_pos + 1
@@ -277,7 +278,7 @@ function awesompd:run()
       scheduler.register_recurring("awesompd_update", self.update_interval,
                                    function() self:update_track() end)
    else
-      self.update_widget_timer = timer({ timeout = 1 })
+      self.update_widget_timer = timer({ timeout = 0.5 })
       self.update_widget_timer:connect_signal("timeout", function()
                                                  self:update_widget()
 						 self.scroll_pos = self.scroll_pos + 1
@@ -978,6 +979,10 @@ end
 -- This function is called every second.
 function awesompd:update_widget()
    self:recalculate_track()
+   if self.poll_update_track == 1 then
+      self.poll_update_track=0
+      self:update_track()
+   end
    self:set_text(self:scroll_text(self.text))
    if self.onscreen then
        self.onscreen.update()
@@ -1026,6 +1031,7 @@ local function to_minsec(seconds)
 end
 
 function awesompd:update_track(file)
+   self.poll_update_track = 0
    local file_exists = (file ~= nil)
    if not file_exists then
       file = io.popen(self:mpcquery())
@@ -1176,7 +1182,10 @@ function awesompd:idle_update()
       self.async_idle_lock = 1
       asyncshell.request('mpc idle', function(f)
          self.async_idle_lock = 0
-         self:update_track()
+         -- Needs to be done synconousy or we risk deleting values
+	 -- other things(eg. onscreen and current_track) are using
+         --self:update_track()
+         self.poll_update_track=1
 	 self.scroll_pos=0
       end)
    end
@@ -1471,6 +1480,7 @@ function awesompd:init_onscreen_widget(args)
                              width = width,
                              x = x, y = y,
                              screen = scr,
+			     opacity = 0.5,
                              visible = false,
                            })
    player_wb:set_widget(top_layout)
