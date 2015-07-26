@@ -65,6 +65,21 @@ awesompd.ESCAPE_MENU_SYMBOL_MAPPING["&"] = "'n'"
 
 -- /// Current track variables and functions /// 
 
+function awesompd:uniified_poll()
+   self.poller_locked = 1
+   if self.poller_locked == 1 then
+      return 0
+   end
+   if self.poll.update_track == 1 then
+      self:update_track()
+      self.poll.update_track = 0
+   end
+   if self.poll.onscreen.popup == 1 then
+      self:update_track()
+      self.poll.update_track = 0
+   end
+   self.poller_locked = 0
+end
 -- Returns a string for the given track to be displayed in the widget
 -- and notification.
 function awesompd.get_display_name(track)
@@ -900,6 +915,7 @@ function awesompd:notify_track()
          nf_text = self.get_extended_info(self.current_track)
          al_cover = self.current_track.album_cover
       end
+      self.onscreen.popup(5)
       self:show_notification(caption, nf_text, al_cover)
    end
 end
@@ -916,6 +932,7 @@ end
 
 function awesompd:continuous_notify_stop()
    self.continuous_notify_timer:stop()
+   self.onscreen.popedup=0
    self:hide_notification()
 end
 
@@ -1480,11 +1497,45 @@ function awesompd:init_onscreen_widget(args)
                              width = width,
                              x = x, y = y,
                              screen = scr,
-			     opacity = 0.5,
                              visible = false,
                            })
    player_wb:set_widget(top_layout)
 
+   function self.onscreen.popup(dur)
+      -- FIXME Their are a lot of race conditions in a lot of places.
+      -- eg. here, we are using execute one to ensure check_popdown
+      -- sees our popedup=1 as to not call popdown as soon as we pop up.
+	 self.onscreen.popedup=1
+	 self.execute_once(0.2, function()
+	    cover_wb.ontop = true
+	    self.execute_once(0.2, function()
+	       player_wb.ontop = true
+	    end)
+	    if dur then
+	       self.onscreen.popup_till = os.time() + dur
+	    else
+	       self.onscreen.popup_till = nil
+	    end
+	 end)
+--	 self.onscreen.auto_popdown = timer(1,function self.onscreen.check_popdown() end)
+   end
+   function self.onscreen.check_popdown()
+      if self.onscreen.popup_till then
+	 if (self.onscreen.popup_till <= os.time() ) then
+	 self.onscreen.popedup=0
+	 end
+      end
+      if self.onscreen.popedup == 0 then
+	 self.onscreen.popdown()
+      end
+   end
+   function self.onscreen.popdown()
+      self.onscreen.popedup=0
+      player_wb.ontop = false
+      self.execute_once(0.2, function ()
+	 cover_wb.ontop = false
+      end)
+   end
    function self.onscreen.clear()
       self.execute_once(1, function ()
                                 player_wb.visible = false
@@ -1500,7 +1551,8 @@ function awesompd:init_onscreen_widget(args)
       if year then
          year = " (" .. year .. ")"
       end
-      local album = self.current_track.album_name .. year
+      local album = (self.current_track.album_name or "<NoAlbum>") .. (year or "(NoYear)")
+      self.onscreen.check_popdown()
 
       local trim = function (s)
          local l = utf8.len(s)
@@ -1536,6 +1588,42 @@ function awesompd:init_onscreen_widget(args)
    end
 
    self.onscreen.clear()
+end
+
+function awesompd:relate_pos(orig, ... ) -- Returns positions relitive to another
+   local objs=args
+   for i,obj in ipairs(objs) do
+      obj.x = obj.x + orig.x
+      obj.y = obj.y + orig.y
+   end
+   local virt_obj = {}
+   virt_obj.move = function(x,y)
+      for i,obj in ipairs(objs) do
+	 obj.x = obj.x + x
+	 obj.y = obj.y + y
+      end
+   end
+   virt_obj.set_pos = function(x,y)
+      orig.x=x
+      orig.y=y
+      for i,obj in ipairs(objs) do
+	 obj.x = obj.x + orig.x
+	 obj.y = obj.y + orig.y
+      end
+   end
+   return virt_obj
+end
+function awesompd:relate_widget(parrent,child) -- A widget placed relitive to another
+   child.x = child.x + parrent.x
+   child.y = child.y + parrent.y
+end
+function awesompd:rel_column(first,second) -- A widget placed relitive to another
+   -- preset x values act as gap except for first
+   second.x = first.x + (first.width + second.width)/2 + second.x
+end
+function awesompd:rel_row(first,second) -- A widget placed relitive to another
+   -- preset y values act as gap except for first
+   second.y = first.y + (first.height + second.height)/2 + second.y
 end
 
 function awesompd.execute_once(delay, func)
