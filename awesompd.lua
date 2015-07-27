@@ -4,6 +4,7 @@
 -- @release v1.2.4
 ---------------------------------------------------------------------------
 
+   local gears = require("gears")
 local wibox = require("wibox")
 local awful = require('awful')
 local beautiful = require('beautiful')
@@ -1171,6 +1172,7 @@ function awesompd:update_track(file)
       end
    end
    self:idle_update()
+   gears.wallpaper.fit( self.current_track.album_cover , 1)
    --self:smart_update()
 end
 
@@ -1387,24 +1389,32 @@ function awesompd:try_get_local_cover(current_file)
       
       -- Get all images in the folder. Also escape occasional single
       -- quotes in folder name.
+      -- NOTE for some reason, it scans last in list first
+      for i,subdir in ipairs({ "/scans/", "/Scans/", "" }) do 
       local request = format("ls '%s' | grep -P '\\.jpg|\\.png|\\.gif|\\.jpeg'",
-                             string.gsub(folder, "'", "'\\''"))
+                             string.gsub(folder .. subdir, "'", "'\\''"))
 
       local covers = self.pread(request, "*all")
       local covers_table = self.split(covers)
       
       if covers_table.n > 0 then
-         result = folder .. covers_table[1]
+         result = folder .. subdir .. covers_table[1]
          if covers_table.n > 1 then
             -- Searching for front cover with grep because Lua regular
             -- expressions suck:[
             local front_cover = 
                self.pread('echo "' .. covers .. 
-                          '" | grep -P -i "cover|front|folder|albumart" | head -n 1', "*line")
+                          '" | grep -P -i "cover|front|folder|albumart" | sort -R | head -n 1', "*line")
+	    if not front_cover then
+               front_cover = self.pread('echo "' .. covers ..
+		  '" | sort -v | head -n 1', "*line")
+	    end
             if front_cover then
-               result = folder .. front_cover
+               result = folder .. subdir .. front_cover
+	       return result
             end
          end
+      end
       end
       return result
    end   
