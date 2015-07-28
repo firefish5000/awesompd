@@ -4,7 +4,8 @@
 -- @release v1.2.4
 ---------------------------------------------------------------------------
 
-   local gears = require("gears")
+-- INIT {{{
+local gears = require("gears")
 local wibox = require("wibox")
 local awful = require('awful')
 local beautiful = require('beautiful')
@@ -37,8 +38,9 @@ end
 local utf8 = awesompd.try_require("utf8")
 asyncshell = awesompd.try_require("asyncshell")
 local jamendo = awesompd.try_require("jamendo")
+-- INIT }}}
 
--- Constants
+-- Constants {{{
 awesompd.PLAYING = "Playing"
 awesompd.PAUSED = "Paused"
 awesompd.STOPPED = "MPD stopped"
@@ -57,136 +59,8 @@ awesompd.NOTIFY_SINGLE = 4
 awesompd.NOTIFY_CONSUME = 5
 awesompd.FORMAT_MP3 = jamendo.FORMAT_MP3
 awesompd.FORMAT_OGG = jamendo.FORMAT_OGG
-awesompd.ESCAPE_SYMBOL_MAPPING = {}
-awesompd.ESCAPE_SYMBOL_MAPPING["&"] = "&amp;"
--- Menus do not handle symbol escaping correctly, so they need their
--- own mapping.
-awesompd.ESCAPE_MENU_SYMBOL_MAPPING = {}
-awesompd.ESCAPE_MENU_SYMBOL_MAPPING["&"] = "'n'"
-
--- /// Current track variables and functions /// 
-
-function awesompd:uniified_poll()
-   self.poller_locked = 1
-   if self.poller_locked == 1 then
-      return 0
-   end
-   if self.poll.update_track == 1 then
-      self:update_track()
-      self.poll.update_track = 0
-   end
-   if self.poll.onscreen.popup == 1 then
-      self:update_track()
-      self.poll.update_track = 0
-   end
-   self.poller_locked = 0
-end
--- Returns a string for the given track to be displayed in the widget
--- and notification.
-function awesompd.get_display_name(track)
-   if track.display_name then
-      return track.display_name
-   elseif track.artist_name and track.track_name then
-      return track.artist_name .. " - " .. track.name
-   end
-end
-
--- Returns a track display name, album name (if exists) and album
--- release year (if exists).
-function awesompd.get_extended_info(track)
-   local result = awesompd.get_display_name(track)
-   if track.album_name then
-      result = result .. "\n" .. track.album_name
-   end
-   if track.year then
-      result = result .. "\n" .. track.year
-   end
-   return result
-end
-
--- Returns true if the current status is either PLAYING or PAUSED
-function awesompd:playing_or_paused()
-   return self.status == awesompd.PLAYING 
-      or self.status == awesompd.PAUSED
-end
-
--- /// Helper functions ///
-
--- Just like awful.util.pread, but takes an argument how to read like
--- "*line" or "*all".
-function awesompd.pread(com, mode)
-   local f = io.popen(com, 'r')
-   local result = nil
-   if f then
-      result = f:read(mode)
-      f:close()
-   end
-   return result
-end
-
--- Slightly modified function awful.util.table.join.
-function awesompd.ajoin(buttons)
-    local result = {}
-    for i = 1, #buttons do
-        if buttons[i] then
-            for k, v in pairs(buttons[i]) do
-                if type(k) == "number" then
-                    table.insert(result, v)
-                else
-                    result[k] = v
-                end
-            end
-        end
-    end
-    return result
- end
-
--- Splits a given string with linebreaks into an array.
-function awesompd.split(s)
-   local l = { n = 0 }
-   if s == "" then
-      return l
-   end
-   s = s .. "\n"
-   local f = function (s) 
-                l.n = l.n + 1
-		l[l.n] = s
-	     end
-   local p = "%s*(.-)%s*\n%s*"
-   s = string.gsub(s,p,f)
-   return l
-end
-
--- Returns the given string if it is not nil or non-empty, otherwise
--- returns nil.
-local function non_empty(s)
-   if s and s ~= "" then
-      return s
-   end
-end
-
--- Icons
-
-function awesompd.load_icons(path)
-   awesompd.ICONS = {}
-   awesompd.ICONS.PLAY = awesompd.try_load(path .. "/play_icon.png")
-   awesompd.ICONS.PAUSE = awesompd.try_load(path .. "/pause_icon.png")
-   awesompd.ICONS.PLAY_PAUSE = awesompd.try_load(path .. "/play_pause_icon.png")
-   awesompd.ICONS.STOP = awesompd.try_load(path .. "/stop_icon.png")
-   awesompd.ICONS.NEXT = awesompd.try_load(path .. "/next_icon.png")
-   awesompd.ICONS.PREV = awesompd.try_load(path .. "/prev_icon.png")
-   awesompd.ICONS.CHECK = awesompd.try_load(path .. "/check_icon.png")
-   awesompd.ICONS.RADIO = awesompd.try_load(path .. "/radio_icon.png")
-   awesompd.ICONS.DEFAULT_ALBUM_COVER = 
-      awesompd.try_load(path .. "/default_album_cover.png")
-   awesompd.ICONS.PLAY_BTN = awesompd.try_load(path .. "/play_btn.png")
-   awesompd.ICONS.PAUSE_BTN = awesompd.try_load(path .. "/pause_btn.png")
-   awesompd.ICONS.STOP_BTN = awesompd.try_load(path .. "/stop_btn.png")
-   awesompd.ICONS.NEXT_BTN = awesompd.try_load(path .. "/next_btn.png")
-   awesompd.ICONS.PREV_BTN = awesompd.try_load(path .. "/prev_btn.png")
-end
-
--- Function that returns a new awesompd object.
+-- Constants }}}
+-- Init Functions {{{
 function awesompd:create()
 -- Initialization
    local instance = {}
@@ -266,89 +140,211 @@ function awesompd:create()
    return instance
 end
 
--- Registers timers for the widget
-function awesompd:run()
-   self.load_icons(self.path_to_icons)
-   jamendo.set_current_format(self.jamendo_format)
-   if self.album_cover_size > 100 then
-      self.album_cover_size = 100
+-- Init Icons
+function awesompd.load_icons(path)
+   awesompd.ICONS = {}
+   awesompd.ICONS.PLAY = awesompd.try_load(path .. "/play_icon.png")
+   awesompd.ICONS.PAUSE = awesompd.try_load(path .. "/pause_icon.png")
+   awesompd.ICONS.PLAY_PAUSE = awesompd.try_load(path .. "/play_pause_icon.png")
+   awesompd.ICONS.STOP = awesompd.try_load(path .. "/stop_icon.png")
+   awesompd.ICONS.NEXT = awesompd.try_load(path .. "/next_icon.png")
+   awesompd.ICONS.PREV = awesompd.try_load(path .. "/prev_icon.png")
+   awesompd.ICONS.CHECK = awesompd.try_load(path .. "/check_icon.png")
+   awesompd.ICONS.RADIO = awesompd.try_load(path .. "/radio_icon.png")
+   awesompd.ICONS.DEFAULT_ALBUM_COVER = 
+      awesompd.try_load(path .. "/default_album_cover.png")
+   awesompd.ICONS.PLAY_BTN = awesompd.try_load(path .. "/play_btn.png")
+   awesompd.ICONS.PAUSE_BTN = awesompd.try_load(path .. "/pause_btn.png")
+   awesompd.ICONS.STOP_BTN = awesompd.try_load(path .. "/stop_btn.png")
+   awesompd.ICONS.NEXT_BTN = awesompd.try_load(path .. "/next_btn.png")
+   awesompd.ICONS.PREV_BTN = awesompd.try_load(path .. "/prev_btn.png")
+end
+
+-- Initialize the inputbox.
+function awesompd:init_inputbox()
+   local width = 200
+   local height = 30
+   local border_color = beautiful.bg_focus or '#535d6c'
+   local margin = 4
+   local wbox = wibox({ name = "awmpd_ibox", height = height , width = width, 
+                        border_color = border_color, border_width = 1 })
+   local ws = screen[mouse.screen].workarea
+
+   wbox.screen = mouse.screen
+   wbox.ontop = true
+
+   local wprompt = awful.widget.prompt()
+   local wtbox = wibox.widget.textbox()
+   local wtmarginbox = wibox.layout.margin(wtbox, margin)
+   local tw, th = wtbox:fit(-1, -1)
+   wbox:geometry({ x = ws.width - width - 5, y = 25,
+                   width = 200, height = th * 2 + margin})
+   local layout = wibox.layout.flex.vertical()
+   layout:add(wtmarginbox)
+   layout:add(wprompt)
+   wbox:set_widget(layout)
+   self.inputbox = { wibox = wbox,
+                     title = wtbox,
+                     prompt = wprompt }
+end
+-- Init Functions }}}
+
+-- Helper functions {{{
+
+-- Just like awful.util.pread, but takes an argument how to read like
+-- "*line" or "*all".
+function awesompd.pread(com, mode)
+   local f = io.popen(com, 'r')
+   local result = nil
+   if f then
+      result = f:read(mode)
+      f:close()
    end
+   return result
+end
 
-   self.text_widget = wibox.widget.textbox()
-   if self.widget_icon then
-      self.icon_widget = wibox.widget.imagebox()
-      self.icon_widget:set_image(self.widget_icon)
-      self.widget:add(self.icon_widget)
+-- Slightly modified function awful.util.table.join.
+function awesompd.ajoin(buttons)
+    local result = {}
+    for i = 1, #buttons do
+        if buttons[i] then
+            for k, v in pairs(buttons[i]) do
+                if type(k) == "number" then
+                    table.insert(result, v)
+                else
+                    result[k] = v
+                end
+            end
+        end
+    end
+    return result
+ end
+
+-- Splits a given string with linebreaks into an array.
+function awesompd.split(s)
+   local l = { n = 0 }
+   if s == "" then
+      return l
    end
-   self.widget:add(self.text_widget)
+   s = s .. "\n"
+   local f = function (s) 
+                l.n = l.n + 1
+		l[l.n] = s
+	     end
+   local p = "%s*(.-)%s*\n%s*"
+   s = string.gsub(s,p,f)
+   return l
+end
 
-   self:update_track()
-   self:check_playlists()
-
-   if scheduler then
-      scheduler.register_recurring("awesompd_scroll", 0.5,
-                                   function()
-				      self:update_widget()
-				      self.scroll_pos = self.scroll_pos + 1
-				   end)
-      scheduler.register_recurring("awesompd_update", self.update_interval,
-                                   function() self:update_track() end)
-   else
-      self.update_widget_timer = timer({ timeout = 0.5 })
-      self.update_widget_timer:connect_signal("timeout", function()
-                                                 self:update_widget()
-						 self.scroll_pos = self.scroll_pos + 1
-                                                         end)
-      self.update_widget_timer:start()
-      self.update_track_timer = timer({ timeout = self.update_interval })
-      self.update_track_timer:connect_signal("timeout", function()
-                                                self:update_track()
-                                                        end)
-      self.update_track_timer:start()
+-- Returns the given string if it is not nil or non-empty, otherwise
+-- returns nil.
+local function non_empty(s)
+   if s and s ~= "" then
+      return s
    end
 end
 
--- Function that registers buttons on the widget.
-function awesompd:register_buttons(buttons)
-   widget_buttons = {}
-   self.global_bindings = {}
-   for b=1, #buttons do
-      if type(buttons[b][1]) == "string" then
-         mods = { buttons[b][1] }
-      else
-         mods = buttons[b][1]
-      end
-      if type(buttons[b][2]) == "number" then 
-         -- This is a mousebinding, bind it to the widget
-         table.insert(widget_buttons, 
-                      awful.button(mods, buttons[b][2], buttons[b][3]))
-      else 
-         -- This is a global keybinding, remember it for later usage in append_global_keys
-         table.insert(self.global_bindings, awful.key(mods, buttons[b][2], buttons[b][3]))
-      end
-   end
-   self.widget:buttons(self.ajoin(widget_buttons))
+local function to_seconds(minsec)
+   local min, sec = minsec:match("(%d+):(%d+)")
+   return tonumber(min) * 60 + tonumber(sec)
 end
 
--- Takes the current table with keybindings and adds widget's own
--- global keybindings that were specified in register_buttons.
--- If keytable is not specified, then adds bindings to default
--- globalkeys table. If specified, then adds bindings to keytable and
--- returns it.
-function awesompd:append_global_keys(keytable)
-   if keytable then
-      for i = 1, #self.global_bindings do
-         keytable = awful.util.table.join(keytable, self.global_bindings[i])
+local function to_minsec(seconds)
+   local min = math.floor(seconds / 60)
+   local sec = seconds % 60
+   return string.format("%s:%s%s", min, (sec < 10) and "0" or "", sec)
+end
+
+-- Helper Functions }}}
+-- Text/Formating Helper Functions {{{
+
+-- Escapes special characters in stirings.
+function awesompd.protect_string(str, for_menu)
+	  return awful.util.escape(str)
+end
+function awesompd.protect_strings(...)
+	local str = {}
+	for i,s in ipairs(arg) do
+		str[i] = awful.util.escape(s)
+	end
+	return unpack(str)
+end
+
+-- Formating
+function awesompd:wrap_output(text)
+   return format('<span font="%s" color="%s">%s%s%s</span>',
+                 self.font, self.font_color,
+                 (text == "" and "" or self.ldecorator), awesompd.protect_string(text),
+                 (text == "" and "" or self.rdecorator))
+end
+
+-- This function actually sets the text on the widget.
+function awesompd:set_text(text)
+   self.text_widget:set_markup(self:wrap_output(text))
+end
+
+function awesompd.find_pattern(text, pattern, start)
+   return utf8.sub(text, string.find(text, pattern, start))
+end
+
+-- Scroll the given text by the current number of symbols.
+function awesompd:scroll_text(text, max_size)
+   if self.scroll_pos > 86400 then
+      self.scroll_pos = 0
+   end
+   local max_size = max_size or self.output_size
+   local result = text
+   local text_len = utf8.len(text)
+   local text_pos = self.scroll_pos % text_len
+   if self.scrolling then
+      if max_size < text_len then
+         text = text .. " - "
+         if text_pos + max_size - 1 > text_len then
+            result = utf8.sub(text, text_pos)
+            result = result .. utf8.sub(text, 1, text_pos + max_size - 1 - text_len)
+            -- self.scroll_pos = self.scroll_pos + 1
+	    --reset scroll_pos every day
+         else
+            result = utf8.sub(text, text_pos, text_pos + max_size - 1)
+            --self.scroll_pos = self.scroll_pos + 1
+         end
       end
-      return keytable
-   else
-      for i = 1, #self.global_bindings do
-         globalkeys = awful.util.table.join(globalkeys, self.global_bindings[i])
-      end
+   end
+   return result
+end
+-- Text/Formating Helper Functions }}}
+-- Track Variable(get/set) Functions {{{
+
+-- Returns a string for the given track to be displayed in the widget
+-- and notification.
+function awesompd.get_display_name(track)
+   if track.display_name then
+      return track.display_name
+   elseif track.artist_name and track.track_name then
+      return track.artist_name .. " - " .. track.name
    end
 end
 
--- /// Group of mpc command functions ///
+-- Returns a track display name, album name (if exists) and album
+-- release year (if exists).
+function awesompd.get_extended_info(track)
+   local result = awesompd.get_display_name(track)
+   if track.album_name then
+      result = result .. "\n" .. track.album_name
+   end
+   if track.year then
+      result = result .. "\n" .. track.year
+   end
+   return result
+end
+
+-- Returns true if the current status is either PLAYING or PAUSED
+function awesompd:playing_or_paused()
+   return self.status == awesompd.PLAYING 
+      or self.status == awesompd.PAUSED
+end
+-- Track Variable Functions }}}
+-- Mpc Functions {{{
 
 -- Returns a mpc command with all necessary parameters. Boolean
 -- human_readable argument configures if the command special
@@ -511,9 +507,422 @@ function awesompd:command_next_server()
           end
 end
 
--- /// End of mpc command functions ///
+-- Mpc Functions }}}
 
--- /// Menu generation functions ///
+-- Timer Functions {{{
+
+function awesompd.execute_once(delay, func)
+   local t = timer({ timeout = delay })
+   t:connect_signal("timeout",
+                    function()
+                       t:stop()
+                       func()
+                    end)
+   t:start()
+   return t
+end
+
+-- Registers timers for the widget
+function awesompd:run()
+   self.load_icons(self.path_to_icons)
+   jamendo.set_current_format(self.jamendo_format)
+   if self.album_cover_size > 100 then
+      self.album_cover_size = 100
+   end
+
+   self.text_widget = wibox.widget.textbox()
+   if self.widget_icon then
+      self.icon_widget = wibox.widget.imagebox()
+      self.icon_widget:set_image(self.widget_icon)
+      self.widget:add(self.icon_widget)
+   end
+   self.widget:add(self.text_widget)
+
+   self:update_track()
+   self:check_playlists()
+
+   if scheduler then
+      scheduler.register_recurring("awesompd_scroll", 0.5,
+                                   function()
+				      self:update_widget()
+				      self.scroll_pos = self.scroll_pos + 1
+				   end)
+      scheduler.register_recurring("awesompd_update", self.update_interval,
+                                   function() self:update_track() end)
+   else
+      self.update_widget_timer = timer({ timeout = 0.5 })
+      self.update_widget_timer:connect_signal("timeout", function()
+                                                 self:update_widget()
+						 self.scroll_pos = self.scroll_pos + 1
+                                                         end)
+      self.update_widget_timer:start()
+      self.update_track_timer = timer({ timeout = self.update_interval })
+      self.update_track_timer:connect_signal("timeout", function()
+                                                self:update_track()
+                                                        end)
+      self.update_track_timer:start()
+   end
+end
+-- Timer Functions }}}
+-- Input/Event Functions {{{
+-- Function that registers buttons on the widget.
+function awesompd:register_buttons(buttons)
+   widget_buttons = {}
+   self.global_bindings = {}
+   for b=1, #buttons do
+      if type(buttons[b][1]) == "string" then
+         mods = { buttons[b][1] }
+      else
+         mods = buttons[b][1]
+      end
+      if type(buttons[b][2]) == "number" then 
+         -- This is a mousebinding, bind it to the widget
+         table.insert(widget_buttons, 
+                      awful.button(mods, buttons[b][2], buttons[b][3]))
+      else 
+         -- This is a global keybinding, remember it for later usage in append_global_keys
+         table.insert(self.global_bindings, awful.key(mods, buttons[b][2], buttons[b][3]))
+      end
+   end
+   self.widget:buttons(self.ajoin(widget_buttons))
+end
+
+-- Takes the current table with keybindings and adds widget's own
+-- global keybindings that were specified in register_buttons.
+-- If keytable is not specified, then adds bindings to default
+-- globalkeys table. If specified, then adds bindings to keytable and
+-- returns it.
+function awesompd:append_global_keys(keytable)
+   if keytable then
+      for i = 1, #self.global_bindings do
+         keytable = awful.util.table.join(keytable, self.global_bindings[i])
+      end
+      return keytable
+   else
+      for i = 1, #self.global_bindings do
+         globalkeys = awful.util.table.join(globalkeys, self.global_bindings[i])
+      end
+   end
+end
+-- Input/Event Functions }}}
+-- Callback Functions {{{
+-- Displays an inputbox on the screen (looks like naughty with prompt).
+-- title_text - bold text on the first line
+-- prompt_text - preceding text on the second line
+-- hook - function that will be called with input data
+-- Use it like this:
+-- self:display_inputbox("Search music on Jamendo", "Artist", print)
+function awesompd:display_inputbox(title_text, prompt_text, hook)
+   if not self.inputbox then
+      self:init_inputbox()
+   end
+   if self.inputbox.wibox.visible then -- Inputbox already exists, replace it
+      keygrabber.stop()
+   end
+
+   local exe_callback = function(s)
+                           hook(s)
+                           self.inputbox.wibox.visible = false
+                        end
+   local done_callback = function()
+                            self.inputbox.wibox.visible = false
+                         end
+   self.inputbox.title:set_markup("<b>" .. title_text .. "</b>")
+   awful.prompt.run( { prompt = " " .. prompt_text .. ": ", bg_cursor = "#222222" }, 
+                     self.inputbox.prompt.widget,
+                     exe_callback, nil, nil, nil, done_callback, nil, nil)
+   self.inputbox.wibox.visible = true
+end
+-- Callback functions }}}
+
+
+-- Update Functions {{{
+function awesompd:update_track(file)
+   self.poll_update_track = 0
+   local file_exists = (file ~= nil)
+   if not file_exists then
+      file = io.popen(self:mpcquery())
+   end
+   self.track_update_time = os.time()
+   local track_line = file:read("*line")
+   local status_line = file:read("*line")
+   local options_line = file:read("*line")
+   if not file_exists then
+      file:close()
+   end
+
+   if not track_line or string.len(track_line) == 0 then
+      if self.status ~= awesompd.DISCONNECTED then
+	 self:notify_disconnect()
+	 self.recreate_menu = true
+         self.status = awesompd.DISCONNECTED
+         self.current_track = { }
+         self:update_widget_text()
+         if self.onscreen then
+            self.onscreen.clear()
+         end
+      end
+   else
+      if self.status == awesompd.DISCONNECTED then
+	 self:notify_connect()
+	 self.recreate_menu = true
+         self:update_widget_text()
+         if self.onscreen then
+            self.onscreen.clear()
+         end
+      end
+      if string.find(track_line,"volume:") or string.find(track_line,"Updating DB") then
+	 if self.status ~= awesompd.STOPPED then
+            self.status = awesompd.STOPPED
+	    self.current_number = 0
+	    self.recreate_menu = true
+	    self.recreate_playback = true
+	    self.recreate_list = true
+            self.album_cover = nil
+            self.current_track = { }
+            self:update_widget_text()
+	 end
+         self:update_state(track_line)
+         if self.onscreen then
+            self.onscreen.clear()
+         end
+
+      else
+         self:update_state(options_line)
+         local _, _, new_file, station, title, artist, album, year =
+            string.find(track_line, "(.*)%-<>%-(.*)%-<>%-(.*)%-<>%-(.*)%-<>%-(.*)%-<>%-(.*)")
+         local display_name, force_update = artist .. " - " .. title, false
+         -- The following code checks if the current track is an
+         -- Internet link. Internet radios change tracks, but the
+         -- current file stays the same, so we should manually compare
+         -- its title.
+         if string.match(new_file, "http://") and
+            -- The following line is awful. This needs to be replaced ASAP.
+            not string.match(new_file, "http://storage%-new%.newjamendo%.com") then
+            album = non_empty(station) or ""
+            display_name = non_empty(title) or new_file
+            if display_name ~= self.current_track.display_name then
+               force_update = true
+            end
+         end
+	 if new_file ~= self.current_track.unique_name or force_update then
+            self.current_track = jamendo.get_track_by_link(new_file)
+            if not self.current_track then
+               self.current_track = { display_name = display_name,
+                                      album_name = album,
+                                      year = year }
+            end
+            self.current_track.unique_name = new_file
+            if self.show_album_cover then
+               self.current_track.album_cover = self:get_cover(new_file)
+            end
+	    self.to_notify = true
+	    self.recreate_menu = true
+	    self.recreate_playback = true
+	    self.recreate_list = true
+	    self.current_number = tonumber(self.find_pattern(status_line,"%d+"))
+            self:update_widget_text()
+
+            -- If the track is not the last, asynchronously download
+            -- the cover for the next track.
+            if self.list_array and self.current_number ~= #self.list_array then
+               -- Get the link (in case it is Jamendo stream) to the next track
+               local next_track = 
+                  self:command_read('playlist -f "%file%" | head -' .. 
+                                    self.current_number + 1 .. ' | tail -1', "*line")
+               jamendo.try_get_cover_async(next_track)
+            end
+	 end
+
+         local status, track_n_count, time_passed, track_duration, track_progress =
+            status_line:match("%[(%w+)%]%s+(%#%d+/%d+)%s+(%d+:%d+)/(%d+:%d+)%s+%((%d+)%%%)")
+         self.track_n_count = track_n_count
+         self.track_passed = to_seconds(time_passed)
+         self.track_progress = tonumber(track_progress)
+         self.current_track.duration = to_seconds(track_duration)
+         self.track_duration = to_seconds(track_duration)
+
+         local new_status = awesompd.PLAYING
+	 if status:match("paused") then
+            new_status = awesompd.PAUSED
+	 end
+	 if new_status ~= self.status then
+	    self.to_notify = true
+	    self.recreate_list = true
+            self.status = new_status
+            self:update_widget_text()
+	 end
+	 self.status_text =
+            string.format("%s %s %s/%s (%s%%)", self.status, track_n_count,
+                          time_passed, track_duration, track_progress)
+         if self.onscreen then
+            self.onscreen.update()
+         end
+      end
+   end
+   self:idle_update()
+   gears.wallpaper.fit( self.current_track.album_cover , 1)
+   gears.wallpaper.fit( self.current_track.album_cover , 2)
+   --self:smart_update()
+end
+
+function awesompd:update_state(state_string)
+   self.state_volume = self.find_pattern(state_string,"%d+%% ")
+   if string.find(state_string,"repeat: on") then
+      self.state_repeat = self:check_set_state(self.state_repeat, "on")
+   else
+      self.state_repeat = self:check_set_state(self.state_repeat, "off")
+   end
+   if string.find(state_string,"random: on") then
+      self.state_random = self:check_set_state(self.state_random, "on")
+   else
+      self.state_random = self:check_set_state(self.state_random, "off")
+   end
+   if string.find(state_string,"single: on") then
+      self.state_single = self:check_set_state(self.state_single, "on")
+   else
+      self.state_single = self:check_set_state(self.state_single, "off")
+   end
+   if string.find(state_string,"consume: on") then
+      self.state_consume = self:check_set_state(self.state_consume, "on")
+   else
+      self.state_consume = self:check_set_state(self.state_consume, "off")
+   end
+end
+
+function awesompd:check_set_state(statevar, val)
+   if statevar ~= val then
+      self.recreate_menu = true
+      self.recreate_options = true
+   end
+   return val
+end
+-- Update Functions }}}
+-- Calculative Functions {{{
+function awesompd:recalculate_track()
+   if self.status == awesompd.PLAYING then
+      local diff = os.time() - self.track_update_time
+      local cur_passed = self.track_passed + diff
+      if cur_passed > self.track_duration then cur_passed = self.track_duration end
+      local cur_prog = math.floor( ((cur_passed/self.track_duration) * 100) + 0.5)
+      self.calc_track_passed = cur_passed
+      self.calc_track_progress = cur_prog
+      self.status_text = string.format("%s %s %s/%s (%s%%)",
+	 awesompd.protect_strings(self.status, self.track_n_count,
+	    to_minsec(self.calc_track_passed),
+	    to_minsec(self.track_duration),
+	    tostring(self.calc_track_progress)))
+   elseif self.status == awesompd.PAUSED then
+      self.calc_track_passed = self.track_passed
+      self.calc_track_progress = self.track_progress
+   end
+end
+-- Calculative Functions }}}
+-- Auto Updaters {{{
+function awesompd:idle_update()
+   -- TODO Ensure this doesn't have a race condition.
+   if self.async_idle_lock == 0 then
+      self.async_idle_lock = 1
+      asyncshell.request('mpc idle', function(f)
+         self.async_idle_lock = 0
+         -- Needs to be done synconousy or we risk deleting values
+	 -- other things(eg. onscreen and current_track) are using
+         --self:update_track()
+         self.poll_update_track=1
+	 self.scroll_pos=0
+      end)
+   end
+end
+
+function awesompd:smart_update()
+   -- Kill any set timers
+   if self.smart_update_timer.started then
+      self.smart_update_timer:stop()
+   end
+   if (self.status == awesompd.PLAYING) then
+      local pos = self.track_passed
+      local dur = self.track_duration
+      local rem = (dur - pos) + 1
+      if (rem < self.update_interval) then
+	 -- Little time remaining, lets update when it runs out 
+	 local smart_timer = timer({ timeout = rem })
+	 smart_timer:connect_signal("timeout", function()
+	    smart_timer:stop()
+	    self:update_track()
+	 end)
+	 self.smart_update_timer = smart_timer
+	 smart_timer:start()
+      end
+   end
+end
+-- Auto Updater }}}
+
+
+-- Notify {{{
+function awesompd:show_notification(hint_title, hint_text, hint_image)
+   self:hide_notification()
+   self.notification = naughty.notify({ title      =  hint_title
+					, text       = awesompd.protect_string(hint_text)
+					, timeout    = 5
+					, position   = "top_right"
+                                        , icon       = hint_image
+                                        , icon_size  = self.album_cover_size
+                                     })
+end
+
+function awesompd:hide_notification()
+   if self.notification ~= nil then
+      naughty.destroy(self.notification)
+      self.notification = nil
+   end
+end
+
+function awesompd:notify_track()
+   if self:playing_or_paused() then
+      local caption = self.status_text
+      local nf_text = self.get_display_name(self.current_track)
+      local al_cover = nil
+      if self.show_album_cover then
+         nf_text = self.get_extended_info(self.current_track)
+         al_cover = self.current_track.album_cover
+      end
+      self.onscreen.popup(5)
+      self:show_notification(caption, nf_text, al_cover)
+   end
+end
+function awesompd:continuous_notify_start(duration)
+   self:update_track()
+   self:notify_track()
+   if duration then
+      self.continuous_notify_till = os.time() + duration
+   else -- You could set a default limit here, perhaps 60 sec.
+      self.continuous_notify_till = nil
+   end
+   self.continuous_notify_timer:start()
+end
+
+function awesompd:continuous_notify_stop()
+   self.continuous_notify_timer:stop()
+   self.onscreen.popedup=0
+   self:hide_notification()
+end
+
+function awesompd:notify_state(state_changed)
+   state_array = { "Volume: " .. self.state_volume ,
+		   "Repeat: " .. self.state_repeat ,
+		   "Random: " .. self.state_random ,
+		   "Single: " .. self.state_single ,
+		   "Consume: " .. self.state_consume }
+   state_header = state_array[state_changed]
+   table.remove(state_array,state_changed)
+   full_state = state_array[1]
+   for i = 2, #state_array do
+      full_state = full_state .. "\n" .. state_array[i]
+   end
+   self:show_notification(state_header, full_state)
+end
+-- Notify }}}
+-- Menu Functions {{{
 
 function awesompd:command_show_menu()
    return 
@@ -528,11 +937,11 @@ function awesompd:command_show_menu()
          then 
             self:check_list() 
             self:check_playlists()
-            local jamendo_menu = { { "Search by", 
+            local jamendo_menu = {{ "Search by", 
                                      { { "Nothing (Top 100)", self:menu_jamendo_top() },
                                        { "Artist", self:menu_jamendo_search_by(jamendo.SEARCH_ARTIST) },
                                        { "Album", self:menu_jamendo_search_by(jamendo.SEARCH_ALBUM) },
-                                       { "Tag", self:menu_jamendo_search_by(jamendo.SEARCH_TAG) }}} }
+                                       { "Tag", self:menu_jamendo_search_by(jamendo.SEARCH_TAG) }} }}
             local browse_menu = self:menu_jamendo_browse()
             if browse_menu then 
                table.insert(jamendo_menu, browse_menu)
@@ -578,7 +987,7 @@ function awesompd:menu_playback()
    if self.recreate_playback then
       local new_menu = {}
       table.insert(new_menu, { "Play\\Pause", 
-                               self:command_toggle(), 
+                               self:command_playpause(), 
                                self.ICONS.PLAY_PAUSE })
       if self:playing_or_paused() then
          if self.list_array and self.list_array[self.current_number-1] then
@@ -833,6 +1242,7 @@ function awesompd:menu_jamendo_search_by(what)
           end
 end
 
+-- TO BE DETERMINED {{{
 -- Checks if the current playlist has changed after the last check.
 function awesompd:check_list()
    local bus = io.popen(self:mpcquery(true) .. "playlist")
@@ -888,458 +1298,9 @@ function awesompd:add_jamendo_tracks(track_table)
 end
 
 -- /// End of menu generation functions ///
-
-function awesompd:show_notification(hint_title, hint_text, hint_image)
-   self:hide_notification()
-   self.notification = naughty.notify({ title      =  hint_title
-					, text       = awesompd.protect_string(hint_text)
-					, timeout    = 5
-					, position   = "top_right"
-                                        , icon       = hint_image
-                                        , icon_size  = self.album_cover_size
-                                     })
-end
-
-function awesompd:hide_notification()
-   if self.notification ~= nil then
-      naughty.destroy(self.notification)
-      self.notification = nil
-   end
-end
-
-function awesompd:notify_track()
-   if self:playing_or_paused() then
-      local caption = self.status_text
-      local nf_text = self.get_display_name(self.current_track)
-      local al_cover = nil
-      if self.show_album_cover then
-         nf_text = self.get_extended_info(self.current_track)
-         al_cover = self.current_track.album_cover
-      end
-      self.onscreen.popup(5)
-      self:show_notification(caption, nf_text, al_cover)
-   end
-end
-function awesompd:continuous_notify_start(duration)
-   self:update_track()
-   self:notify_track()
-   if duration then
-      self.continuous_notify_till = os.time() + duration
-   else -- You could set a default limit here, perhaps 60 sec.
-      self.continuous_notify_till = nil
-   end
-   self.continuous_notify_timer:start()
-end
-
-function awesompd:continuous_notify_stop()
-   self.continuous_notify_timer:stop()
-   self.onscreen.popedup=0
-   self:hide_notification()
-end
-
-function awesompd:notify_state(state_changed)
-   state_array = { "Volume: " .. self.state_volume ,
-		   "Repeat: " .. self.state_repeat ,
-		   "Random: " .. self.state_random ,
-		   "Single: " .. self.state_single ,
-		   "Consume: " .. self.state_consume }
-   state_header = state_array[state_changed]
-   table.remove(state_array,state_changed)
-   full_state = state_array[1]
-   for i = 2, #state_array do
-      full_state = full_state .. "\n" .. state_array[i]
-   end
-   self:show_notification(state_header, full_state)
-end
-
-function awesompd:wrap_output(text)
-   return format('<span font="%s" color="%s">%s%s%s</span>',
-                 self.font, self.font_color,
-                 (text == "" and "" or self.ldecorator), awesompd.protect_string(text),
-                 (text == "" and "" or self.rdecorator))
-end
-
--- This function actually sets the text on the widget.
-function awesompd:set_text(text)
-   self.text_widget:set_markup(self:wrap_output(text))
-end
-
-function awesompd.find_pattern(text, pattern, start)
-   return utf8.sub(text, string.find(text, pattern, start))
-end
-
--- Scroll the given text by the current number of symbols.
-function awesompd:scroll_text(text, max_size)
-   if self.scroll_pos > 86400 then
-      self.scroll_pos = 0
-   end
-   local max_size = max_size or self.output_size
-   local result = text
-   local text_len = utf8.len(text)
-   local text_pos = self.scroll_pos % text_len
-   if self.scrolling then
-      if max_size < text_len then
-         text = text .. " - "
-         if text_pos + max_size - 1 > text_len then
-            result = utf8.sub(text, text_pos)
-            result = result .. utf8.sub(text, 1, text_pos + max_size - 1 - text_len)
-            -- self.scroll_pos = self.scroll_pos + 1
-	    --reset scroll_pos every day
-         else
-            result = utf8.sub(text, text_pos, text_pos + max_size - 1)
-            --self.scroll_pos = self.scroll_pos + 1
-         end
-      end
-   end
-   return result
-end
-
--- This function is called every second.
-function awesompd:update_widget()
-   self:recalculate_track()
-   if self.poll_update_track == 1 then
-      self.poll_update_track=0
-      self:update_track()
-   end
-   self:set_text(self:scroll_text(self.text))
-   if self.onscreen then
-       self.onscreen.update()
-   end
-   self:check_notify()
-end
-
--- This function is called by update_track each time content of
--- the widget must be changed.
-function awesompd:update_widget_text()
-   if self:playing_or_paused() then
-      self.text = self.get_display_name(self.current_track)
-   else
-      self.text = self.status
-   end
-end
-
--- Checks if notification should be shown and shows if positive.
-function awesompd:check_notify()
-   if self.to_notify then
---      self:notify_track()
-      self:continuous_notify_start(5)
-      self.to_notify = false
-   end
-end
-
-function awesompd:notify_connect()
-   self:show_notification("Connected", "Connection established to " .. self.servers[self.current_server].server ..
-		 " on port " .. self.servers[self.current_server].port)
-end
-
-function awesompd:notify_disconnect()
-   self:show_notification("Disconnected", "Cannot connect to " .. self.servers[self.current_server].server ..
-		 " on port " .. self.servers[self.current_server].port)
-end
-
-local function to_seconds(minsec)
-   local min, sec = minsec:match("(%d+):(%d+)")
-   return tonumber(min) * 60 + tonumber(sec)
-end
-
-local function to_minsec(seconds)
-   local min = math.floor(seconds / 60)
-   local sec = seconds % 60
-   return string.format("%s:%s%s", min, (sec < 10) and "0" or "", sec)
-end
-
-function awesompd:update_track(file)
-   self.poll_update_track = 0
-   local file_exists = (file ~= nil)
-   if not file_exists then
-      file = io.popen(self:mpcquery())
-   end
-   self.track_update_time = os.time()
-   local track_line = file:read("*line")
-   local status_line = file:read("*line")
-   local options_line = file:read("*line")
-   if not file_exists then
-      file:close()
-   end
-
-   if not track_line or string.len(track_line) == 0 then
-      if self.status ~= awesompd.DISCONNECTED then
-	 self:notify_disconnect()
-	 self.recreate_menu = true
-         self.status = awesompd.DISCONNECTED
-         self.current_track = { }
-         self:update_widget_text()
-         if self.onscreen then
-            self.onscreen.clear()
-         end
-      end
-   else
-      if self.status == awesompd.DISCONNECTED then
-	 self:notify_connect()
-	 self.recreate_menu = true
-         self:update_widget_text()
-         if self.onscreen then
-            self.onscreen.clear()
-         end
-      end
-      if string.find(track_line,"volume:") or string.find(track_line,"Updating DB") then
-	 if self.status ~= awesompd.STOPPED then
-            self.status = awesompd.STOPPED
-	    self.current_number = 0
-	    self.recreate_menu = true
-	    self.recreate_playback = true
-	    self.recreate_list = true
-            self.album_cover = nil
-            self.current_track = { }
-            self:update_widget_text()
-	 end
-         self:update_state(track_line)
-         if self.onscreen then
-            self.onscreen.clear()
-         end
-
-      else
-         self:update_state(options_line)
-         local _, _, new_file, station, title, artist, album, year =
-            string.find(track_line, "(.*)%-<>%-(.*)%-<>%-(.*)%-<>%-(.*)%-<>%-(.*)%-<>%-(.*)")
-         local display_name, force_update = artist .. " - " .. title, false
-         -- The following code checks if the current track is an
-         -- Internet link. Internet radios change tracks, but the
-         -- current file stays the same, so we should manually compare
-         -- its title.
-         if string.match(new_file, "http://") and
-            -- The following line is awful. This needs to be replaced ASAP.
-            not string.match(new_file, "http://storage%-new%.newjamendo%.com") then
-            album = non_empty(station) or ""
-            display_name = non_empty(title) or new_file
-            if display_name ~= self.current_track.display_name then
-               force_update = true
-            end
-         end
-	 if new_file ~= self.current_track.unique_name or force_update then
-            self.current_track = jamendo.get_track_by_link(new_file)
-            if not self.current_track then
-               self.current_track = { display_name = display_name,
-                                      album_name = album,
-                                      year = year }
-            end
-            self.current_track.unique_name = new_file
-            if self.show_album_cover then
-               self.current_track.album_cover = self:get_cover(new_file)
-            end
-	    self.to_notify = true
-	    self.recreate_menu = true
-	    self.recreate_playback = true
-	    self.recreate_list = true
-	    self.current_number = tonumber(self.find_pattern(status_line,"%d+"))
-            self:update_widget_text()
-
-            -- If the track is not the last, asynchronously download
-            -- the cover for the next track.
-            if self.list_array and self.current_number ~= #self.list_array then
-               -- Get the link (in case it is Jamendo stream) to the next track
-               local next_track = 
-                  self:command_read('playlist -f "%file%" | head -' .. 
-                                    self.current_number + 1 .. ' | tail -1', "*line")
-               jamendo.try_get_cover_async(next_track)
-            end
-	 end
-
-         local status, track_n_count, time_passed, track_duration, track_progress =
-            status_line:match("%[(%w+)%]%s+(%#%d+/%d+)%s+(%d+:%d+)/(%d+:%d+)%s+%((%d+)%%%)")
-         self.track_n_count = track_n_count
-         self.track_passed = to_seconds(time_passed)
-         self.track_progress = tonumber(track_progress)
-         self.current_track.duration = to_seconds(track_duration)
-         self.track_duration = to_seconds(track_duration)
-
-         local new_status = awesompd.PLAYING
-	 if status:match("paused") then
-            new_status = awesompd.PAUSED
-	 end
-	 if new_status ~= self.status then
-	    self.to_notify = true
-	    self.recreate_list = true
-            self.status = new_status
-            self:update_widget_text()
-	 end
-	 self.status_text =
-            string.format("%s %s %s/%s (%s%%)", self.status, track_n_count,
-                          time_passed, track_duration, track_progress)
-         if self.onscreen then
-            self.onscreen.update()
-         end
-      end
-   end
-   self:idle_update()
-   gears.wallpaper.fit( self.current_track.album_cover , 1)
-   --self:smart_update()
-end
-
-function awesompd:recalculate_track()
-   if self.status == awesompd.PLAYING then
-      local diff = os.time() - self.track_update_time
-      local cur_passed = self.track_passed + diff
-      if cur_passed > self.track_duration then cur_passed = self.track_duration end
-      local cur_prog = math.floor( ((cur_passed/self.track_duration) * 100) + 0.5)
-      self.calc_track_passed = cur_passed
-      self.calc_track_progress = cur_prog
-      self.status_text = string.format("%s %s %s/%s (%s%%)",
-	 awesompd.protect_strings(self.status, self.track_n_count,
-	    to_minsec(self.calc_track_passed),
-	    to_minsec(self.track_duration),
-	    tostring(self.calc_track_progress)))
-   elseif self.status == awesompd.PAUSED then
-      self.calc_track_passed = self.track_passed
-      self.calc_track_progress = self.track_progress
-   end
-end
-
-function awesompd:idle_update()
-   -- TODO Ensure this doesn't have a race condition.
-   if self.async_idle_lock == 0 then
-      self.async_idle_lock = 1
-      asyncshell.request('mpc idle', function(f)
-         self.async_idle_lock = 0
-         -- Needs to be done synconousy or we risk deleting values
-	 -- other things(eg. onscreen and current_track) are using
-         --self:update_track()
-         self.poll_update_track=1
-	 self.scroll_pos=0
-      end)
-   end
-end
-
-function awesompd:smart_update()
-   -- Kill any set timers
-   if self.smart_update_timer.started then
-      self.smart_update_timer:stop()
-   end
-   if (self.status == awesompd.PLAYING) then
-      local pos = self.track_passed
-      local dur = self.track_duration
-      local rem = (dur - pos) + 1
-      if (rem < self.update_interval) then
-	 -- Little time remaining, lets update when it runs out 
-	 local smart_timer = timer({ timeout = rem })
-	 smart_timer:connect_signal("timeout", function()
-	    smart_timer:stop()
-	    self:update_track()
-	 end)
-	 self.smart_update_timer = smart_timer
-	 smart_timer:start()
-      end
-   end
-end
-
-function awesompd:update_state(state_string)
-   self.state_volume = self.find_pattern(state_string,"%d+%% ")
-   if string.find(state_string,"repeat: on") then
-      self.state_repeat = self:check_set_state(self.state_repeat, "on")
-   else
-      self.state_repeat = self:check_set_state(self.state_repeat, "off")
-   end
-   if string.find(state_string,"random: on") then
-      self.state_random = self:check_set_state(self.state_random, "on")
-   else
-      self.state_random = self:check_set_state(self.state_random, "off")
-   end
-   if string.find(state_string,"single: on") then
-      self.state_single = self:check_set_state(self.state_single, "on")
-   else
-      self.state_single = self:check_set_state(self.state_single, "off")
-   end
-   if string.find(state_string,"consume: on") then
-      self.state_consume = self:check_set_state(self.state_consume, "on")
-   else
-      self.state_consume = self:check_set_state(self.state_consume, "off")
-   end
-end
-
-function awesompd:check_set_state(statevar, val)
-   if statevar ~= val then
-      self.recreate_menu = true
-      self.recreate_options = true
-   end
-   return val
-end
-
-function awesompd:run_prompt(welcome,hook)
-   awful.prompt.run({ prompt = welcome },
-		    self.promptbox[mouse.screen].widget,
-		    hook)
-end
-
--- Replaces control characters with escaped ones.
--- for_menu - defines if the special escable table for menus should be
--- used.
-function awesompd.protect_string(str, for_menu)
-	  return awful.util.escape(str)
-end
-function awesompd.protect_strings(...)
-	local str = {}
-	for i,s in ipairs(arg) do
-		str[i] = awful.util.escape(s)
-	end
-	return unpack(str)
-end
-
--- Initialize the inputbox.
-function awesompd:init_inputbox()
-   local width = 200
-   local height = 30
-   local border_color = beautiful.bg_focus or '#535d6c'
-   local margin = 4
-   local wbox = wibox({ name = "awmpd_ibox", height = height , width = width, 
-                        border_color = border_color, border_width = 1 })
-   local ws = screen[mouse.screen].workarea
-
-   wbox.screen = mouse.screen
-   wbox.ontop = true
-
-   local wprompt = awful.widget.prompt()
-   local wtbox = wibox.widget.textbox()
-   local wtmarginbox = wibox.layout.margin(wtbox, margin)
-   local tw, th = wtbox:fit(-1, -1)
-   wbox:geometry({ x = ws.width - width - 5, y = 25,
-                   width = 200, height = th * 2 + margin})
-   local layout = wibox.layout.flex.vertical()
-   layout:add(wtmarginbox)
-   layout:add(wprompt)
-   wbox:set_widget(layout)
-   self.inputbox = { wibox = wbox,
-                     title = wtbox,
-                     prompt = wprompt }
-end
-
--- Displays an inputbox on the screen (looks like naughty with prompt).
--- title_text - bold text on the first line
--- prompt_text - preceding text on the second line
--- hook - function that will be called with input data
--- Use it like this:
--- self:display_inputbox("Search music on Jamendo", "Artist", print)
-function awesompd:display_inputbox(title_text, prompt_text, hook)
-   if not self.inputbox then
-      self:init_inputbox()
-   end
-   if self.inputbox.wibox.visible then -- Inputbox already exists, replace it
-      keygrabber.stop()
-   end
-
-   local exe_callback = function(s)
-                           hook(s)
-                           self.inputbox.wibox.visible = false
-                        end
-   local done_callback = function()
-                            self.inputbox.wibox.visible = false
-                         end
-   self.inputbox.title:set_markup("<b>" .. title_text .. "</b>")
-   awful.prompt.run( { prompt = " " .. prompt_text .. ": ", bg_cursor = "#222222" }, 
-                     self.inputbox.prompt.widget,
-                     exe_callback, nil, nil, nil, done_callback, nil, nil)
-   self.inputbox.wibox.visible = true
-end
-
+-- TO BE DETERMINED }}}
+-- Menu Functions }}}
+-- Cover Functions {{{
 -- Gets the cover for the given track. First looks in the Jamendo
 -- cache. If the track is not a Jamendo stream, looks in local
 -- folders. If there is no cover art either returns the default album
@@ -1419,8 +1380,8 @@ function awesompd:try_get_local_cover(current_file)
       return result
    end   
 end
-
--- /// Onscreen widget functions ///
+-- CoverFunctions }}}
+-- OSD Functoions {{{
 
 function awesompd:init_onscreen_widget(args)
    -- Originally written by TODD from linux.org.ru.
@@ -1635,18 +1596,69 @@ function awesompd:rel_row(first,second) -- A widget placed relitive to another
    -- preset y values act as gap except for first
    second.y = first.y + (first.height + second.height)/2 + second.y
 end
+-- OSD Functions }}}
 
-function awesompd.execute_once(delay, func)
-
-   local t = timer({ timeout = delay })
-   t:connect_signal("timeout",
-                    function()
-                       t:stop()
-                       func()
-                    end)
-   t:start()
-   return t
+-- TO BE DETERMINED {{{
+-- This function is called every second.
+function awesompd:update_widget()
+   self:recalculate_track()
+   if self.poll_update_track == 1 then
+      self.poll_update_track=0
+      self:update_track()
+   end
+   self:set_text(self:scroll_text(self.text))
+   if self.onscreen then
+       self.onscreen.update()
+   end
+   self:check_notify()
 end
+
+-- This function is called by update_track each time content of
+-- the widget must be changed.
+function awesompd:update_widget_text()
+   if self:playing_or_paused() then
+      self.text = self.get_display_name(self.current_track)
+   else
+      self.text = self.status
+   end
+end
+
+-- Checks if notification should be shown and shows if positive.
+function awesompd:check_notify()
+   if self.to_notify then
+--      self:notify_track()
+      self:continuous_notify_start(5)
+      self.to_notify = false
+   end
+end
+
+function awesompd:notify_connect()
+   self:show_notification("Connected", "Connection established to " .. self.servers[self.current_server].server ..
+		 " on port " .. self.servers[self.current_server].port)
+end
+
+function awesompd:notify_disconnect()
+   self:show_notification("Disconnected", "Cannot connect to " .. self.servers[self.current_server].server ..
+		 " on port " .. self.servers[self.current_server].port)
+end
+
+function awesompd:unified_poll()
+   self.poller_locked = 1
+   if self.poller_locked == 1 then
+      return 0
+   end
+   if self.poll.update_track == 1 then
+      self:update_track()
+      self.poll.update_track = 0
+   end
+   if self.poll.onscreen.popup == 1 then
+      self:update_track()
+      self.poll.update_track = 0
+   end
+   self.poller_locked = 0
+end
+
+-- TO BE DETERMINED }}}
 
 -- /// Deprecated, left for some backward compatibility in
 -- configuration ///
