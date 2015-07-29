@@ -61,9 +61,15 @@ awesompd.FORMAT_MP3 = jamendo.FORMAT_MP3
 awesompd.FORMAT_OGG = jamendo.FORMAT_OGG
 -- Constants }}}
 -- Init Functions {{{
-function awesompd:create()
+function awesompd:create() 
 -- Initialization
+-- Not sure why we are using instance.
+-- If he was trying to make multiple instances possible(not sure why we would want multiple)
+-- We can easily do it with a table copy function.
+-- Even so, I cannot see why mouse::enter was placed here. 
+-- It, and my event functions for it, seem like they belong in the run function...
    local instance = {}
+   -- Realy have no clue whats going on in these two lines and after.
    setmetatable(instance,self)
    self.__index = self
    instance.current_server = 1
@@ -89,7 +95,6 @@ function awesompd:create()
    instance.state_random = "NaN"
    instance.state_single = "NaN"
    instance.state_consume = "NaN"
-
 -- Default user options
    instance.servers = { { server = "localhost", port = 6600 } }
    instance.font = "Monospace"
@@ -111,6 +116,57 @@ function awesompd:create()
    instance.track_duration = 0
    instance.calc_track_passed = 0
    instance.calc_track_progress = 0
+-- Event Functions
+   instance.poll = {
+      -- MPD State
+  --    State={
+--	 Volume={
+	    VolUp={},
+	    Down={},
+--	 },
+	 Single={},
+	 Random={},
+	 Consume={},
+	 Connect={},
+	 Disconnect={},
+--      },
+--      Track={
+      TrackEvent={},
+	 TrackChange={},
+	 TrackPlay={},
+	 TrackPause={},
+	 TrackStop={},
+	 TrackNext={},
+	 TrackPrev={},
+	 TrackSeek={},
+--      },
+      Albumn={
+	 Cover={
+	    Fetched={},
+	    Change={},
+	 },
+	 Change={},
+      },
+      -- Functions
+--         Event={
+	 EventRedraw={},
+	 EventUpdate={},
+	 EventCover={},
+	 EventMouseEnter={},
+	 EventMouseLeave={},
+	 UpdateTrack={},
+	 Recalculate_Track={},
+	 Status_Redraw={},
+	 OSD_Redraw={},
+	 Statusbar_Redraw={},
+	 AlbumnCover={},
+--      },
+      MetaData={ -- Metadata change support may be added in future. Only artist/albumn make sence, and only when in sequential mode.
+	 Album={},
+	 Artist={},
+	 Title={},
+      }
+   }
 -- Idle Update Lock
    instance.async_idle_lock = 0
    instance.poll_update_track = 0
@@ -131,11 +187,30 @@ function awesompd:create()
    -- When to stop notifying, epoch
    -- awesompd widget mouse hover.
    -- Widget configuration
-   instance.widget:connect_signal("mouse::enter", function(c)
+   function instance:event_register_call(event,func)
+      local idx = #self.poll[event]+1
+      self.poll[event][idx] = func
+      return self.poll[event][idx]
+   end
+   function instance:event_poll(event)
+      local calls = self.poll[event]
+      for idx=1,#calls do
+	 if type(calls[idx]) == "function" then
+	    calls[idx]()
+         end
+      end
+   end
+   instance:event_register_call("EventMouseEnter",function()
       instance:continuous_notify_start()
    end)
-   instance.widget:connect_signal("mouse::leave", function(c)
+   instance:event_register_call("EventMouseLeave",function()
       instance:continuous_notify_stop()
+   end)
+   instance.widget:connect_signal("mouse::enter", function(c)
+      instance:event_poll("EventMouseEnter")
+   end)
+   instance.widget:connect_signal("mouse::leave", function(c)
+      instance:event_poll("EventMouseLeave")
    end)
    return instance
 end
@@ -538,33 +613,35 @@ function awesompd:run()
    end
    self.widget:add(self.text_widget)
 
-   self:update_track()
+   self:event_register_call("EventRedraw",function()
+      self:update_widget()
+      self.scroll_pos = self.scroll_pos + 1
+   end)
+   self:event_register_call("EventUpdate",function()
+      self:update_track()
+   end)
+   self:event_poll("EventUpdate")
    self:check_playlists()
-
    if scheduler then
-      scheduler.register_recurring("awesompd_scroll", 0.5,
-                                   function()
-				      self:update_widget()
-				      self.scroll_pos = self.scroll_pos + 1
-				   end)
-      scheduler.register_recurring("awesompd_update", self.update_interval,
-                                   function() self:update_track() end)
+      scheduler.register_recurring("awesompd_scroll", 0.5, function()
+	 self:event_poll("EventRedraw") end)
+      scheduler.register_recurring("awesompd_update", self.update_interval, function()
+	 self:event_poll("EventUpdate") end)
    else
+      
       self.update_widget_timer = timer({ timeout = 0.5 })
       self.update_widget_timer:connect_signal("timeout", function()
-                                                 self:update_widget()
-						 self.scroll_pos = self.scroll_pos + 1
-                                                         end)
+	 self:event_poll("EventRedraw") end)
       self.update_widget_timer:start()
       self.update_track_timer = timer({ timeout = self.update_interval })
       self.update_track_timer:connect_signal("timeout", function()
-                                                self:update_track()
-                                                        end)
+	 self:event_poll("EventUpdate") end)
       self.update_track_timer:start()
    end
 end
 -- Timer Functions }}}
 -- Input/Event Functions {{{
+--Input Helper Functions {{{
 -- Function that registers buttons on the widget.
 function awesompd:register_buttons(buttons)
    widget_buttons = {}
@@ -604,6 +681,8 @@ function awesompd:append_global_keys(keytable)
       end
    end
 end
+-- Input Helper Functions }}}
+
 -- Input/Event Functions }}}
 -- Callback Functions {{{
 -- Displays an inputbox on the screen (looks like naughty with prompt).
@@ -637,6 +716,7 @@ end
 
 
 -- Update Functions {{{
+-- mpc -f '%name%\n%artist%\n%album%\n%albumartist%\n%comment%\n%composer%\n%date%\n%disc%\n%genre%\n%performer%\n%title%\n%track%\n%time%\n%file%\n%position%\n%mtime%\n%mdate%' current
 function awesompd:update_track(file)
    self.poll_update_track = 0
    local file_exists = (file ~= nil)
@@ -715,6 +795,7 @@ function awesompd:update_track(file)
             self.current_track.unique_name = new_file
             if self.show_album_cover then
                self.current_track.album_cover = self:get_cover(new_file)
+	       self:event_poll("EventCover")
             end
 	    self.to_notify = true
 	    self.recreate_menu = true
@@ -761,8 +842,6 @@ function awesompd:update_track(file)
       end
    end
    self:idle_update()
-   gears.wallpaper.fit( self.current_track.album_cover , 1)
-   gears.wallpaper.fit( self.current_track.album_cover , 2)
    --self:smart_update()
 end
 
