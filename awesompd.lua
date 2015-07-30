@@ -38,6 +38,16 @@ end
 local utf8 = awesompd.try_require("utf8")
 asyncshell = awesompd.try_require("asyncshell")
 local jamendo = awesompd.try_require("jamendo")
+
+-- until we fix eveything, so when it shouldnt be called(mpd is disconnected so no track exist, as an example))
+-- we dont call it. But for now, its the easiest option
+local _utf8len = utf8.len
+utf8.len = function(s)
+   if s then
+      return _utf8len(s)
+   end
+   return 0
+end
 -- INIT }}}
 
 -- Constants {{{
@@ -149,6 +159,7 @@ function awesompd:create()
       },
       -- Functions
 --         Event={
+	 NotifyTrack={},
 	 EventRedraw={},
 	 EventUpdate={},
 	 EventCover={},
@@ -188,12 +199,21 @@ function awesompd:create()
    -- awesompd widget mouse hover.
    -- Widget configuration
    function instance:event_register_call(event,func)
-      local idx = #self.poll[event]+1
+      local idx = #instance.poll[event]+1
       self.poll[event][idx] = func
       return self.poll[event][idx]
    end
    function instance:event_poll(event)
-      local calls = self.poll[event]
+      local calls = instance.poll[event]
+      if event == nil then
+	 naughty.notify({timeout=1000,title="Error",text="Poll called without event."});
+	 return false
+      end
+      if calls == nil then
+	 naughty.notify({timeout=1000,title="Error",text="Non-existing event "..event.." called. Creating event"});
+	 instance.poll[event]={}
+	 calls = instance.poll[event]
+      end
       for idx=1,#calls do
 	 if type(calls[idx]) == "function" then
 	    calls[idx]()
@@ -618,15 +638,15 @@ function awesompd:run()
       self.scroll_pos = self.scroll_pos + 1
    end)
    self:event_register_call("EventUpdate",function()
-      self:update_track()
+      self:idle_update()
    end)
-   self:event_poll("EventUpdate")
+   self:update_track()
    self:check_playlists()
    if scheduler then
       scheduler.register_recurring("awesompd_scroll", 0.5, function()
 	 self:event_poll("EventRedraw") end)
       scheduler.register_recurring("awesompd_update", self.update_interval, function()
-	 self:event_poll("EventUpdate") end)
+	 self:update_track() end)
    else
       
       self.update_widget_timer = timer({ timeout = 0.5 })
@@ -635,7 +655,7 @@ function awesompd:run()
       self.update_widget_timer:start()
       self.update_track_timer = timer({ timeout = self.update_interval })
       self.update_track_timer:connect_signal("timeout", function()
-	 self:event_poll("EventUpdate") end)
+	 self:update_track() end)
       self.update_track_timer:start()
    end
 end
@@ -841,7 +861,7 @@ function awesompd:update_track(file)
          end
       end
    end
-   self:idle_update()
+   self:event_poll("EventUpdate")
    --self:smart_update()
 end
 
@@ -958,6 +978,7 @@ end
 
 function awesompd:notify_track()
    if self:playing_or_paused() then
+   self:event_poll("NotifyTrack")
       local caption = self.status_text
       local nf_text = self.get_display_name(self.current_track)
       local al_cover = nil
