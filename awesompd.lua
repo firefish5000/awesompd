@@ -199,6 +199,14 @@ function awesompd:create()
    -- awesompd widget mouse hover.
    -- Widget configuration
    function instance:event_register_call(event,func)
+      if event == nil then
+	 naughty.notify({timeout=1000,title="Error",text="Register called without event."});
+	 return false
+      end
+      if instance.poll[event] == nil then
+	 naughty.notify({timeout=1000,title="Error",text="Registering Non-existing event "..event..". Creating event"});
+	 instance.poll[event]={}
+      end
       local idx = #instance.poll[event]+1
       self.poll[event][idx] = func
       return self.poll[event][idx]
@@ -607,13 +615,17 @@ end
 -- Timer Functions {{{
 
 function awesompd.execute_once(delay, func)
+   if delay == nil or delay < 0 then delay = 0 end
    local t = timer({ timeout = delay })
-   t:connect_signal("timeout",
-                    function()
-                       t:stop()
-                       func()
-                    end)
-   t:start()
+   t:connect_signal("timeout", function()
+      t:stop()
+      func()
+   end)
+   if delay > 0 then
+      t:start()
+   else
+      func()
+   end
    return t
 end
 
@@ -1571,6 +1583,9 @@ function awesompd:init_onscreen_widget(args)
                              visible = false,
                            })
    player_wb:set_widget(top_layout)
+   self.onscreen.hover=0
+   self.onscreen.cover_hover=0
+   self.onscreen.widget_hover=0
 
    function self.onscreen.popup(dur)
       -- FIXME Their are a lot of race conditions in a lot of places.
@@ -1578,8 +1593,14 @@ function awesompd:init_onscreen_widget(args)
       -- sees our popedup=1 as to not call popdown as soon as we pop up.
 	 self.onscreen.popedup=1
 	 self.execute_once(0.2, function()
+	    if self.onscreen.popedup ~= 1 then
+	       return
+	    end
 	    cover_wb.ontop = true
 	    self.execute_once(0.2, function()
+	       if self.onscreen.popedup ~= 1 then
+		  return
+	       end
 	       player_wb.ontop = true
 	    end)
 	    if dur then
@@ -1600,11 +1621,22 @@ function awesompd:init_onscreen_widget(args)
 	 self.onscreen.popdown()
       end
    end
-   function self.onscreen.popdown()
+   -- FIXME replace popedup, hover, and till time with a uniform hash table.
+   function self.onscreen.popdown(delay)
       self.onscreen.popedup=0
-      player_wb.ontop = false
-      self.execute_once(0.2, function ()
-	 cover_wb.ontop = false
+      self.execute_once(delay or 0, function ()
+         if self.onscreen.popedup > 0 or self.onscreen.hover == 1 then
+	    self.onscreen.popedup = 1
+	    return
+	 end
+         player_wb.ontop = false
+	 self.execute_once(0.2, function ()
+	    if self.onscreen.popedup > 0 or self.onscreen.hover == 1 then
+	       self.onscreen.popedup = 1
+	       return
+	    end
+	    cover_wb.ontop = false
+	 end)
       end)
    end
    function self.onscreen.clear()
@@ -1657,9 +1689,63 @@ function awesompd:init_onscreen_widget(args)
                                                           end)
                                 end)
    end
+   player_wb:connect_signal("mouse::enter", function(c)
+      self:event_poll("MouseEnterOSD_Widget")
+   end)
+   player_wb:connect_signal("mouse::leave", function(c)
+      self:event_poll("MouseLeaveOSD_Widget")
+   end)
+   cover_wb:connect_signal("mouse::enter", function(c)
+      self:event_poll("MouseEnterOSD_Cover")
+   end)
+   cover_wb:connect_signal("mouse::leave", function(c)
+      self:event_poll("MouseLeaveOSD_Cover")
+   end)
+   self:event_register_call("MouseEnterOSD_Widget",function()
+      self.onscreen.widget_hover=1
+      self:event_poll("MouseEnterOSD")
+   end)
+   self:event_register_call("MouseLeaveOSD_Widget",function()
+      self.onscreen.widget_hover=0
+      if self.onscreen.cover_hover==0 then
+	 self:event_poll("MouseLeaveOSD")
+      end
+   end)
+   self:event_register_call("MouseEnterOSD_Cover",function()
+      self.onscreen.cover_hover=1
+      self:event_poll("MouseEnterOSD")
+   end)
+   self:event_register_call("MouseLeaveOSD_Cover",function()
+      self.onscreen.cover_hover=0
+      if self.onscreen.widget_hover==0 then
+	 self:event_poll("MouseLeaveOSD")
+      end
+   end)
+   self:event_register_call("MouseEnterOSD",function()
+      self.onscreen.hover=1
+      self.onscreen.popup(8460)
+   end)
+   self:event_register_call("MouseLeaveOSD",function()
+      self.onscreen.popup_till = os.time()+5
+      self.onscreen.hover=0
+      --self.onscreen.popdown(5)
+   end)
 
    self.onscreen.clear()
 end
+
+-- Continuous Notify (updates notify every continuous_notify_interval sec until duration passed or stop is called)
+--self.osd_notify_interval = 0.5 -- How often to update when continuous is active
+--self.osd_notify_till = nil -- Seconds since epoch time when notify should be auto hidden. nil=no auto-hide
+--self.osd_notify_timer = timer({ timeout = self.continuous_notify_interval })
+--self.osd_notify_timer:connect_signal("timeout", function()
+--   --self:update_track()
+--   if (self.osd_notify_till) then
+--      if (self.osd_notify_till <= os.time() ) then
+--	 self:osd_notify_stop()
+--      end
+--   end
+--end)
 
 function awesompd:relate_pos(orig, ... ) -- Returns positions relitive to another
    local objs=args
