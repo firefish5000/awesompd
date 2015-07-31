@@ -363,12 +363,12 @@ end
 
 -- Escapes special characters in stirings.
 function awesompd.protect_string(str, for_menu)
-	  return awful.util.escape(str)
+	  return awful.util.escape(tostring(str))
 end
 function awesompd.protect_strings(...)
 	local str = {}
 	for i,s in ipairs(arg) do
-		str[i] = awful.util.escape(s)
+		str[i] = awful.util.escape(tostring(s))
 	end
 	return unpack(str)
 end
@@ -1649,7 +1649,7 @@ function awesompd:init_onscreen_widget(args)
    end
 
    function self.onscreen.update()
-      local title = self.current_track.display_name
+      local title = self.current_track.display_name or "<NoTitle>"
       local year = self.current_track.year
       if year then
          year = " (" .. year .. ")"
@@ -1672,9 +1672,9 @@ function awesompd:init_onscreen_widget(args)
 			awesompd.protect_strings(trim(title), trim(album))))
       status_text:set_markup(
          string.format("<span font='%s'>%s %s/%s</span>", font,
-			awesompd.protect_strings(self.track_n_count,
-                                               to_minsec(self.calc_track_passed),
-                                               to_minsec(self.track_duration))))
+			awesompd.protect_strings(self.track_n_count or 0,
+                                               to_minsec(self.calc_track_passed or 0),
+                                               to_minsec(self.track_duration or 0))))
       cover_img:set_image(self.current_track.album_cover)
       track_prbar:set_value(self.calc_track_progress)
       if self.status == awesompd.PLAYING then
