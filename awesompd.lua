@@ -38,6 +38,7 @@ end
 local utf8 = awesompd.try_require("utf8")
 asyncshell = awesompd.try_require("asyncshell")
 local jamendo = awesompd.try_require("jamendo")
+wibox.layout.scroll = awesompd.try_require("scroll")
 
 -- until we fix eveything, so when it shouldnt be called(mpd is disconnected so no track exist, as an example))
 -- we dont call it. But for now, its the easiest option
@@ -1539,6 +1540,30 @@ function awesompd:init_onscreen_widget(args)
 
    local track_text = wibox.widget.textbox()
    track_text:set_valign("center")
+   --track_text:set_ellipsize("none")
+   self.onscreen.track_text=track_text
+   local track_scroll = wibox.layout.scroll(track_text,10,50)
+   track_scroll:auto(true)
+--   self:event_register_call("EventUpdate",function() 
+--      naughty.notify({title="Poll",text="EventUpdate",timeout=1000})
+--   end)
+   self:event_register_call("EventUpdate",function()
+      local title = self.current_track.display_name or "<NoTitle>"
+      local year = self.current_track.year
+      if year then
+         year = " (" .. year .. ")"
+      end
+      local album = (self.current_track.album_name or "<NoAlbum>") .. (year or "(NoYear)")
+      self.onscreen.check_popdown()
+      track_tb_title:set_markup(string.format("<span font='%s'>%s</span>", font,
+	 awesompd.protect_string(title)))
+      track_tb_album:set_markup(string.format("<span font='%s'>%s</span>", font,
+	 awesompd.protect_string(title)))
+--      track_text:set_markup(
+  --       string.format("<span font='%s'>%s\n%s</span>", font,
+--			awesompd.protect_strings(title, album)))
+   end)
+
 
    local track_prbar = awful.widget.progressbar({ height = 5 })
    track_prbar:set_border_color(args.prbar_border_color or "#444444")
@@ -1548,7 +1573,8 @@ function awesompd:init_onscreen_widget(args)
 
    local v_margin = 6
    local with_margins = wibox.layout.margin
-   ver_layout:add(with_margins(track_text, 0, 0, v_margin, 0))
+   --ver_layout:add(wibox.layout.constraint(track_scroll,"max",300,20))
+   ver_layout:add(with_margins(wibox.layout.constraint(track_scroll,"max",300,nil), 0, 0, v_margin, 0))
    ver_layout:add(with_margins(track_prbar, 0, 10, v_margin, 0))
    ver_layout:add(with_margins(bottom_layout, 0, 0, v_margin, 0))
 
@@ -1667,9 +1693,9 @@ function awesompd:init_onscreen_widget(args)
          end
       end
 
-      track_text:set_markup(
-         string.format("<span font='%s'>%s\n%s</span>", font,
-			awesompd.protect_strings(trim(title), trim(album))))
+--      track_text:set_markup(
+--         string.format("<span font='%s'>%s\n%s</span>", font,
+--			awesompd.protect_strings(trim(title), trim(album))))
       status_text:set_markup(
          string.format("<span font='%s'>%s %s/%s</span>", font,
 			awesompd.protect_strings(self.track_n_count or 0,
