@@ -392,7 +392,7 @@ function awesompd.find_pattern(text, pattern, start)
 end
 
 -- Scroll the given text by the current number of symbols.
-function awesompd:scroll_text(text, max_size)
+function awesompd:text_scroll_trimmer(text, max_size)
    if self.scroll_pos > 86400 then
       self.scroll_pos = 0
    end
@@ -416,6 +416,40 @@ function awesompd:scroll_text(text, max_size)
    end
    return result
 end
+
+function awesompd:text_bouncer()
+   local txt_w = wibox.widget.textbox()
+   txt_w:set_valign("center")
+   local scroll_w = wibox.layout.scroll(txt_w,10,50)
+   track_scroll:auto(true)
+   -- Check Width/xpos
+   function scroll_w:draw(wibox, cr, width, height)
+      local abs_x,width_busy
+      if not scroll_w.widget then
+	 return
+      end
+      if scroll_w._wg > width then
+	 if scroll_w._scrolled and not scroll_w._scrolltimer.started then
+	    scroll_w._scrolltimer:start()
+	 end
+      end
+      abs_x = math.abs(scroll_w._x)
+      if abs_x - scroll_w._space_width > scroll_w._wg then
+	 scroll_w._x = scroll_w._wg+scroll_w._x+scroll_w._space_width
+	 abs_x = math.abs(scroll_w._x)
+      end
+      base.draw_widget(wibox, cr, scroll_w.widget, scroll_w._x, 0,(scroll_w._expanded and width-scroll_w._x or (width-scroll_w._x > scroll_w._wg and scroll_w._wg or width-scroll_w._x )), height)
+      width_busy = scroll_w._wg - abs_x
+      if scroll_w._wg > width and width_busy < width + scroll_w._space_width then
+	 scroll_w._deltax = 0 - scroll_w.deltax
+      end
+   end
+   local obj={}
+   obj.text = txt_w
+   obj.scroll = scroll_w
+   return obj
+end
+
 -- Text/Formating Helper Functions }}}
 -- Track Variable(get/set) Functions {{{
 
@@ -1498,6 +1532,9 @@ end
 
 function awesompd:init_onscreen_widget(args)
    -- Originally written by TODD from linux.org.ru.
+   ----------------
+   -- OSD Variables
+   ----------------
    self.onscreen = {}
    local args = args or {}
    local scr = args.screen or 1
@@ -1509,6 +1546,10 @@ function awesompd:init_onscreen_widget(args)
    local x = args.x or 20
    local y = args.y or -20
    local font = args.font or beautiful.font or "sans 8"
+   local wb_bg_color = args.color or beautiful.bg_normal -- FIXME color set bg? bg_color, wb_bg_color
+   local prbar_border_color = args.prbar_border_color or "#444444"
+   local prbar_bg_color = args.prbar_bg_color or "#444444"
+   local prbar_fg_color = args.prbar_fg_color or "#aaaaaa"
 
    if x >= 0 then
       x = scrgeom.x + x
@@ -1521,7 +1562,9 @@ function awesompd:init_onscreen_widget(args)
    else
       y = scrgeom.y + scrgeom.height + y - height
    end
-
+   --------------
+   -- Cover setup
+   --------------
    local cover_wb = wibox({ width = cover_size,
                             height = cover_size,
                             x = x + cover_shift_left,
@@ -1530,7 +1573,9 @@ function awesompd:init_onscreen_widget(args)
                           })
    local cover_img = wibox.widget.imagebox()
    cover_wb:set_widget(cover_img)
-
+   -----------------
+   -- Text/Controles
+   -----------------
    local top_layout = wibox.layout.fixed.horizontal()
    local ver_layout = wibox.layout.fixed.vertical()
    local buttons_layout = wibox.layout.fixed.horizontal()
@@ -1538,46 +1583,31 @@ function awesompd:init_onscreen_widget(args)
    top_layout:add(wibox.layout.constraint(nil, "exact", cover_size + cover_shift_left + 10, height))
    top_layout:add(ver_layout)
 
-   local track_text = wibox.widget.textbox()
-   track_text:set_valign("center")
-   --track_text:set_ellipsize("none")
-   self.onscreen.track_text=track_text
-   local track_scroll = wibox.layout.scroll(track_text,10,50)
-   track_scroll:auto(true)
---   self:event_register_call("EventUpdate",function() 
---      naughty.notify({title="Poll",text="EventUpdate",timeout=1000})
---   end)
-   self:event_register_call("EventUpdate",function()
-      local title = self.current_track.display_name or "<NoTitle>"
-      local year = self.current_track.year
-      if year then
-         year = " (" .. year .. ")"
-      end
-      local album = (self.current_track.album_name or "<NoAlbum>") .. (year or "(NoYear)")
-      self.onscreen.check_popdown()
-      track_tb_title:set_markup(string.format("<span font='%s'>%s</span>", font,
-	 awesompd.protect_string(title)))
-      track_tb_album:set_markup(string.format("<span font='%s'>%s</span>", font,
-	 awesompd.protect_string(title)))
---      track_text:set_markup(
-  --       string.format("<span font='%s'>%s\n%s</span>", font,
---			awesompd.protect_strings(title, album)))
-   end)
+   -- Title Scroller
+   local track_title = wibox.widget.textbox()
+   track_title:set_valign("center")
+   local track_scroll_title = wibox.layout.scroll(track_title,10,50)
+   --track_scroll_title:auto(true)
+   local track_album = wibox.widget.textbox()
+   track_album:set_valign("center")
+   local track_scroll_album = wibox.layout.scroll(track_album,10,50)
 
-
+   -- Progress Bar
    local track_prbar = awful.widget.progressbar({ height = 5 })
-   track_prbar:set_border_color(args.prbar_border_color or "#444444")
-   track_prbar:set_background_color(args.prbar_bg_color or "#444444")
-   track_prbar:set_color(args.prbar_fg_color or "#aaaaaa")
+   track_prbar:set_border_color(prbar_border_color)
+   track_prbar:set_background_color(prbar_bg_color)
+   track_prbar:set_color(prbar_fg_color)
    track_prbar:set_max_value(100)
 
+   -- Vertical Layout
    local v_margin = 6
    local with_margins = wibox.layout.margin
-   --ver_layout:add(wibox.layout.constraint(track_scroll,"max",300,20))
-   ver_layout:add(with_margins(wibox.layout.constraint(track_scroll,"max",300,nil), 0, 0, v_margin, 0))
+   ver_layout:add(with_margins(wibox.layout.constraint(track_scroll_title,"max",300,nil), 0, 0, v_margin, 0))
+   ver_layout:add(with_margins(wibox.layout.constraint(track_scroll_album,"max",300,nil), 0, 0, v_margin, 0))
    ver_layout:add(with_margins(track_prbar, 0, 10, v_margin, 0))
    ver_layout:add(with_margins(bottom_layout, 0, 0, v_margin, 0))
 
+   -- Bottom layout
    local status_text = wibox.widget.textbox()
    status_text:set_align("right")
 
@@ -1601,7 +1631,8 @@ function awesompd:init_onscreen_widget(args)
    bottom_layout:set_left(buttons_layout)
    bottom_layout:set_right(with_margins(status_text, 0, 10, 0, 0))
 
-   local player_wb = wibox({ bg = args.color or beautiful.bg_normal,
+   -- Eibox containing text/controls
+   local player_wb = wibox({ bg = wb_bg_color,
                              height = height,
                              width = width,
                              x = x, y = y,
@@ -1609,10 +1640,13 @@ function awesompd:init_onscreen_widget(args)
                              visible = false,
                            })
    player_wb:set_widget(top_layout)
+
+   ----------------
+   -- OSD Functions
+   ----------------
    self.onscreen.hover=0
    self.onscreen.cover_hover=0
    self.onscreen.widget_hover=0
-
    function self.onscreen.popup(dur)
       -- FIXME Their are a lot of race conditions in a lot of places.
       -- eg. here, we are using execute one to ensure check_popdown
@@ -1693,9 +1727,9 @@ function awesompd:init_onscreen_widget(args)
          end
       end
 
---      track_text:set_markup(
---         string.format("<span font='%s'>%s\n%s</span>", font,
---			awesompd.protect_strings(trim(title), trim(album))))
+      -- TODO scroll title/album here
+      track_scroll_title:scroll()
+      track_scroll_album:scroll()
       status_text:set_markup(
          string.format("<span font='%s'>%s %s/%s</span>", font,
 			awesompd.protect_strings(self.track_n_count or 0,
@@ -1715,6 +1749,22 @@ function awesompd:init_onscreen_widget(args)
                                                           end)
                                 end)
    end
+   ---------------
+   --Signels/Polls
+   ---------------
+   self:event_register_call("EventUpdate",function()
+      local title = self.current_track.display_name or "<NoTitle>"
+      local year = self.current_track.year
+      if year then
+         year = " (" .. year .. ")"
+      end
+      local album = (self.current_track.album_name or "<NoAlbum>") .. (year or "(NoYear)")
+      self.onscreen.check_popdown()
+      track_title:set_markup(string.format("<span font='%s'>%s</span>", font,
+	 awesompd.protect_string(title)))
+      track_album:set_markup(string.format("<span font='%s'>%s</span>", font,
+	 awesompd.protect_string(album)))
+   end)
    player_wb:connect_signal("mouse::enter", function(c)
       self:event_poll("MouseEnterOSD_Widget")
    end)
@@ -1760,19 +1810,7 @@ function awesompd:init_onscreen_widget(args)
    self.onscreen.clear()
 end
 
--- Continuous Notify (updates notify every continuous_notify_interval sec until duration passed or stop is called)
---self.osd_notify_interval = 0.5 -- How often to update when continuous is active
---self.osd_notify_till = nil -- Seconds since epoch time when notify should be auto hidden. nil=no auto-hide
---self.osd_notify_timer = timer({ timeout = self.continuous_notify_interval })
---self.osd_notify_timer:connect_signal("timeout", function()
---   --self:update_track()
---   if (self.osd_notify_till) then
---      if (self.osd_notify_till <= os.time() ) then
---	 self:osd_notify_stop()
---      end
---   end
---end)
-
+-- JUNK {{{
 function awesompd:relate_pos(orig, ... ) -- Returns positions relitive to another
    local objs=args
    for i,obj in ipairs(objs) do
@@ -1808,6 +1846,7 @@ function awesompd:rel_row(first,second) -- A widget placed relitive to another
    -- preset y values act as gap except for first
    second.y = first.y + (first.height + second.height)/2 + second.y
 end
+-- JUNK }}}
 -- OSD Functions }}}
 
 -- TO BE DETERMINED {{{
@@ -1818,7 +1857,7 @@ function awesompd:update_widget()
       self.poll_update_track=0
       self:update_track()
    end
-   self:set_text(self:scroll_text(self.text))
+   self:set_text(self:text_scroll_trimmer(self.text))
    if self.onscreen then
        self.onscreen.update()
    end
@@ -1852,22 +1891,6 @@ end
 function awesompd:notify_disconnect()
    self:show_notification("Disconnected", "Cannot connect to " .. self.servers[self.current_server].server ..
 		 " on port " .. self.servers[self.current_server].port)
-end
-
-function awesompd:unified_poll()
-   self.poller_locked = 1
-   if self.poller_locked == 1 then
-      return 0
-   end
-   if self.poll.update_track == 1 then
-      self:update_track()
-      self.poll.update_track = 0
-   end
-   if self.poll.onscreen.popup == 1 then
-      self:update_track()
-      self.poll.update_track = 0
-   end
-   self.poller_locked = 0
 end
 
 -- TO BE DETERMINED }}}
