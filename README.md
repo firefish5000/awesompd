@@ -1,9 +1,8 @@
 ## Description ##
 
 This is a madman's take on the advanced MPD widget\client for AwesomeWM.
-As all changes are currently highly experimental, and once satisfied I am unlikly to continue development,.
 
-Unless you are interested in one of the experimental features, I suggest you use the base project [located here](https://github.com/alexander-yakushev/awesompd).
+All changes are currently highly experimental, and once satisfied I am unlikly to continue development. So, Unless you are interested in one of the experimental features, I suggest you use the base project [located here](https://github.com/alexander-yakushev/awesompd).
 
 Keep in mind that some of the 'new' features implimented here, such as the OSD(onscreen display) were taken from the base project's "yet unreleased" version located in owner's awesomerc repository.
 
