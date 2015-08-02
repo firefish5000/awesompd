@@ -1,24 +1,36 @@
 ## Description ##
 
-This is an advanced MPD widget\client for AwesomeWM.
+This is a madman's take on the advanced MPD widget\client for AwesomeWM.
+As all changes are currently highly experimental, and once satisfied I am unlikly to continue development,.
 
-For the detailed installation guide please see
-http://awesome.naquadah.org/wiki/Awesompd_widget .
+Unless you are interested in one of the experimental features, I suggest you use the base project [located here](https://github.com/alexander-yakushev/awesompd).
 
-Also you can find an example of the widget configuration in the file
-rcsample.lua.
+Keep in mind that some of the 'new' features implimented here, such as the OSD(onscreen display) were taken from the base project's "yet unreleased" version located in owner's awesomerc repository.
 
-## Version explanation ##
+Here is a gif showing the current version in a relitivly unchanged enviorment.
+TODO
 
-Use this version with Awesome v3.5.x. If you are using Awesome
-v.3.4.x, please consider using
-[this](https://github.com/alexander-yakushev/awesompd/tree/awesome-3.4)
-version of the widget.
 
-### Changes in 1.1.0 ###
+### Some Changes ###
+Imported:
+- [x] Onscreen display/widgit
 
-* Album covers are now also shown for the local tracks (images are taken from the current track's folder)
-* When the Jamendo track is playing you can visit artist's or album's page from the Jamendo menu
-* Notification now shows the album name for the current track (for both local and Jamendo tracks)
-* A few minor modifications and bugfixes
+Other:
+- [x] Make text scroll based on width, not character count.
+- [x] Make text scroll smoothly, as if the text widget were moving behind a mask. (partial, uses pango ellipsize) I believe this is likely to be added to the original as well, once awesomewm releases a version with scroll support.
+- [ ] Make text fade in/out.
+- [ ] Make a text bouncer (moving left and right, stagging/WIP, trying to fix bug with short strings first)
+- [x] Make event based, allowing user to add functions to events like OnTrackChange, OnUpdateTrack, OnPlay, OnMouseEnterOSD. (WIP)
+- [x] 
 
+TODO:
+- [x] Make text scroll based on width, not character count.
+- [x] Make text scroll smoothly, as if the text widget were moving behind a mask. (partial, uses pango ellipsize)
+- [ ] Make text fade in/out.
+- [WIP] title and album scoll_boxes should be in sync (percentage scrolled
+  wise)
+- [ ] scroll_boxes should be capable of slowing/pausing on beginning/end
+- [ ] scroll_boxes should be capable of slowing/pausing incrementilly
+- [WIP] scroll_boxes should be capable of "bouncing" left and right.
+- [ ] Find a way to shorten text the same way pango does with ellipsize
+  to fit the widgit, without having an ellips.
