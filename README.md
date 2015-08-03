@@ -7,7 +7,7 @@ All changes are currently highly experimental, and once satisfied I am unlikly t
 Keep in mind that some of the 'new' features implimented here, such as the OSD(onscreen display) were taken from the base project's "yet unreleased" version located in owner's awesomerc repository.
 
 Here is a small gif showing the current version in a relitivly unchanged enviorment.
-![Imgur](https://i.imgur.com/UPfTip4.gif)
+![Imgur](https://i.imgur.com/0IiOsK7.gif)
 
 
 ### Some Changes ###
