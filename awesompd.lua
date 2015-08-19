@@ -38,6 +38,7 @@ end
 local utf8 = awesompd.try_require("utf8")
 asyncshell = awesompd.try_require("asyncshell")
 local jamendo = awesompd.try_require("jamendo")
+local Events = awesompd.try_require("Events")
 wibox.layout.scroll = awesompd.try_require("scroll")
 
 -- until we fix eveything, so when it shouldnt be called(mpd is disconnected so no track exist, as an example))
@@ -128,57 +129,55 @@ function awesompd:create()
    instance.calc_track_passed = 0
    instance.calc_track_progress = 0
 -- Event Functions
-   instance.poll = {
-      -- MPD State
-  --    State={
---	 Volume={
-	    VolUp={},
-	    Down={},
---	 },
-	 Single={},
-	 Random={},
-	 Consume={},
-	 Connect={},
-	 Disconnect={},
---      },
---      Track={
-      TrackEvent={},
-	 TrackChange={},
-	 TrackPlay={},
-	 TrackPause={},
-	 TrackStop={},
-	 TrackNext={},
-	 TrackPrev={},
-	 TrackSeek={},
---      },
-      Albumn={
-	 Cover={
-	    Fetched={},
-	    Change={},
-	 },
-	 Change={},
-      },
-      -- Functions
---         Event={
-	 NotifyTrack={},
-	 EventRedraw={},
-	 EventUpdate={},
-	 EventCover={},
-	 EventMouseEnter={},
-	 EventMouseLeave={},
-	 UpdateTrack={},
-	 Recalculate_Track={},
-	 Status_Redraw={},
-	 OSD_Redraw={},
-	 Statusbar_Redraw={},
-	 AlbumnCover={},
---      },
-      MetaData={ -- Metadata change support may be added in future. Only artist/albumn make sence, and only when in sequential mode.
-	 Album={},
-	 Artist={},
-	 Title={},
-      }
-   }
+   instance.events = Events.new()
+   instance.new_event = instance.events.new_event
+   instance.register_call = instance.events.add_call
+   instance.event_poll = instance.events.poll
+   instance.error_poll = instance.events.error_poll
+   instance.event = instance.events.event
+   instance:new_event("Vol::Up")
+   instance:new_event("Vol::Down")
+   instance:new_event("State::Single")
+   instance:new_event("State::Random")
+   instance:new_event("State::Consume")
+   instance:new_event("State::Connect")
+   instance:new_event("State::Disconnect")
+   instance:new_event("Track::Change")
+   instance:new_event("Track::Play")
+   instance:new_event("Track::Pause")
+   instance:new_event("Track::Stop")
+   instance:new_event("Track::Next")
+   instance:new_event("Track::Prev")
+
+   instance:new_event("Statusbar::Mouse::Enter")
+   instance:new_event("Statusbar::Mouse::Leave")
+   
+   instance:new_event("OSD::Mouse::Enter")
+   instance:new_event("OSD::Mouse::Leave")
+   instance:new_event("OSD::Status::Mouse::Enter")
+   instance:new_event("OSD::Status::Mouse::Leave")
+   instance:new_event("OSD::Cover::Mouse::Enter")
+   instance:new_event("OSD::Cover::Mouse::Leave")
+   
+   instance:new_event("Event::Redraw")
+   instance:new_event("Event::Redraw::Status")
+   instance:new_event("Event::Redraw::OSD")
+   instance:new_event("Event::Redraw::Statusbar")
+   
+   instance:new_event("Event::Update")
+   instance:new_event("Event::Cover")
+   instance:new_event("Event::UpdateTrack")
+   instance:new_event("Event::RecalculateTrack")
+   instance:new_event("Event::AlbumnCover")
+   instance:new_event("Event::NotifyTrack")
+   
+   instance:new_event("Meta::Album")
+   instance:new_event("Meta::Track")
+   instance:new_event("Meta::Title")
+   instance:new_event("Album::Cover")
+   instance:new_event("Album::Cover::Fetched")
+   instance:new_event("Album::Cover::Changed")
+   instance:new_event("Album::Changed")
 -- Idle Update Lock
    instance.async_idle_lock = 0
    instance.poll_update_track = 0
@@ -199,47 +198,18 @@ function awesompd:create()
    -- When to stop notifying, epoch
    -- awesompd widget mouse hover.
    -- Widget configuration
-   function instance:event_register_call(event,func)
-      if event == nil then
-	 naughty.notify({timeout=1000,title="Error",text="Register called without event."});
-	 return false
-      end
-      if instance.poll[event] == nil then
-	 naughty.notify({timeout=1000,title="Error",text="Registering Non-existing event "..event..". Creating event"});
-	 instance.poll[event]={}
-      end
-      local idx = #instance.poll[event]+1
-      self.poll[event][idx] = func
-      return self.poll[event][idx]
-   end
-   function instance:event_poll(event)
-      local calls = instance.poll[event]
-      if event == nil then
-	 naughty.notify({timeout=1000,title="Error",text="Poll called without event."});
-	 return false
-      end
-      if calls == nil then
-	 naughty.notify({timeout=1000,title="Error",text="Non-existing event "..event.." called. Creating event"});
-	 instance.poll[event]={}
-	 calls = instance.poll[event]
-      end
-      for idx=1,#calls do
-	 if type(calls[idx]) == "function" then
-	    calls[idx]()
-         end
-      end
-   end
-   instance:event_register_call("EventMouseEnter",function()
+
+   instance:register_call("Statusbar::Mouse::Enter",function()
       instance:continuous_notify_start()
    end)
-   instance:event_register_call("EventMouseLeave",function()
+   instance:register_call("Statusbar::Mouse::Leave",function()
       instance:continuous_notify_stop()
    end)
    instance.widget:connect_signal("mouse::enter", function(c)
-      instance:event_poll("EventMouseEnter")
+      instance:event_poll("Statusbar::Mouse::Enter")
    end)
    instance.widget:connect_signal("mouse::leave", function(c)
-      instance:event_poll("EventMouseLeave")
+      instance:event_poll("Statusbar::Mouse::Leave")
    end)
    return instance
 end
@@ -581,6 +551,14 @@ function awesompd:command_volume_down()
           end
 end
 
+-- deletes from quee. 
+function awesompd:command_del()
+   return function(track_pos)
+	     track_pos=track_pos or 0
+             self:command("del " .. track_pos )
+          end
+end
+
 function awesompd:command_load_playlist(name)
    return function()
              self:command("load \"" .. name .. "\"", function() 
@@ -680,25 +658,25 @@ function awesompd:run()
    end
    self.widget:add(self.text_widget)
 
-   self:event_register_call("EventRedraw",function()
+   self:register_call("Event::Redraw",function()
       self:update_widget()
       self.scroll_pos = self.scroll_pos + 1
    end)
-   self:event_register_call("EventUpdate",function()
+   self:register_call("Event::Update",function()
       self:idle_update()
    end)
    self:update_track()
    self:check_playlists()
    if scheduler then
       scheduler.register_recurring("awesompd_scroll", 0.5, function()
-	 self:event_poll("EventRedraw") end)
+	 self:event_poll("Event::Redraw") end)
       scheduler.register_recurring("awesompd_update", self.update_interval, function()
 	 self:update_track() end)
    else
       
       self.update_widget_timer = timer({ timeout = 0.5 })
       self.update_widget_timer:connect_signal("timeout", function()
-	 self:event_poll("EventRedraw") end)
+	 self:event_poll("Event::Redraw") end)
       self.update_widget_timer:start()
       self.update_track_timer = timer({ timeout = self.update_interval })
       self.update_track_timer:connect_signal("timeout", function()
@@ -862,7 +840,7 @@ function awesompd:update_track(file)
             self.current_track.unique_name = new_file
             if self.show_album_cover then
                self.current_track.album_cover = self:get_cover(new_file)
-	       self:event_poll("EventCover")
+	       self:event_poll("Event::Cover")
             end
 	    self.to_notify = true
 	    self.recreate_menu = true
@@ -908,7 +886,7 @@ function awesompd:update_track(file)
          end
       end
    end
-   self:event_poll("EventUpdate")
+   self:event_poll("Event::Update")
    --self:smart_update()
 end
 
@@ -965,11 +943,22 @@ function awesompd:recalculate_track()
 end
 -- Calculative Functions }}}
 -- Auto Updaters {{{
+--    database: the song database has been modified after update.
+--    update: a database update has started or finished. If the database was modified during the update, the database event is also emitted.
+--    stored_playlist: a stored playlist has been modified, renamed, created or deleted
+--    playlist: the current playlist has been modified
+--    player: the track has been started, stopped, changed or seeked (automaticly or manualy)
+--    mixer: the volume has been changed
+--    output: an audio output has been enabled or disabled
+--    options: options like repeat, random, crossfade, replay gain
+--    sticker: the sticker database has been modified.
+--    subscription: a client has subscribed or unsubscribed to a channel
+--    message: a message was received on a channel this client is subscribed to; this event is only emitted when the queue is empty 
 function awesompd:idle_update()
    -- TODO Ensure this doesn't have a race condition.
    if self.async_idle_lock == 0 then
       self.async_idle_lock = 1
-      asyncshell.request('mpc idle', function(f)
+      asyncshell.request('mpc idle playlist player message', function(f)
          self.async_idle_lock = 0
          -- Needs to be done synconousy or we risk deleting values
 	 -- other things(eg. onscreen and current_track) are using
@@ -1025,7 +1014,7 @@ end
 
 function awesompd:notify_track()
    if self:playing_or_paused() then
-   self:event_poll("NotifyTrack")
+   self:event_poll("Event::NotifyTrack")
       local caption = self.status_text
       local nf_text = self.get_display_name(self.current_track)
       local al_cover = nil
@@ -1586,11 +1575,11 @@ function awesompd:init_onscreen_widget(args)
    -- Title Scroller
    local track_title = wibox.widget.textbox()
    track_title:set_valign("center")
-   local track_scroll_title = wibox.layout.scroll(track_title,10,50)
    --track_scroll_title:auto(true)
+   local track_scroll_title = wibox.layout.scroll(track_title,5,50)
    local track_album = wibox.widget.textbox()
    track_album:set_valign("center")
-   local track_scroll_album = wibox.layout.scroll(track_album,10,50)
+   local track_scroll_album = wibox.layout.scroll(track_album,5,50)
 
    -- Progress Bar
    local track_prbar = awful.widget.progressbar({ height = 5 })
@@ -1752,7 +1741,7 @@ function awesompd:init_onscreen_widget(args)
    ---------------
    --Signels/Polls
    ---------------
-   self:event_register_call("EventUpdate",function()
+   self:register_call("Event::Update",function()
       local title = self.current_track.display_name or "<NoTitle>"
       local year = self.current_track.year
       if year then
@@ -1766,42 +1755,42 @@ function awesompd:init_onscreen_widget(args)
 	 awesompd.protect_string(album)))
    end)
    player_wb:connect_signal("mouse::enter", function(c)
-      self:event_poll("MouseEnterOSD_Widget")
+      self:event_poll("OSD::Status::Mouse::Enter")
    end)
    player_wb:connect_signal("mouse::leave", function(c)
-      self:event_poll("MouseLeaveOSD_Widget")
+      self:event_poll("OSD::Status::Mouse::Leave")
    end)
    cover_wb:connect_signal("mouse::enter", function(c)
-      self:event_poll("MouseEnterOSD_Cover")
+      self:event_poll("OSD::Cover::Mouse::Enter")
    end)
    cover_wb:connect_signal("mouse::leave", function(c)
-      self:event_poll("MouseLeaveOSD_Cover")
+      self:event_poll("OSD::Cover::Mouse::Leave")
    end)
-   self:event_register_call("MouseEnterOSD_Widget",function()
+   self:register_call("OSD::Status::Mouse::Enter",function()
       self.onscreen.widget_hover=1
-      self:event_poll("MouseEnterOSD")
+      self:event_poll("OSD::Mouse::Enter")
    end)
-   self:event_register_call("MouseLeaveOSD_Widget",function()
+   self:register_call("OSD::Status::Mouse::Leave",function()
       self.onscreen.widget_hover=0
       if self.onscreen.cover_hover==0 then
-	 self:event_poll("MouseLeaveOSD")
+	 self:event_poll("OSD::Mouse::Leave")
       end
    end)
-   self:event_register_call("MouseEnterOSD_Cover",function()
+   self:register_call("OSD::Cover::Mouse::Enter",function()
       self.onscreen.cover_hover=1
-      self:event_poll("MouseEnterOSD")
+      self:event_poll("OSD::Mouse::Enter")
    end)
-   self:event_register_call("MouseLeaveOSD_Cover",function()
+   self:register_call("OSD::Cover::Mouse::Leave",function()
       self.onscreen.cover_hover=0
       if self.onscreen.widget_hover==0 then
-	 self:event_poll("MouseLeaveOSD")
+	 self:event_poll("OSD::Mouse::Leave")
       end
    end)
-   self:event_register_call("MouseEnterOSD",function()
+   self:register_call("OSD::Mouse::Enter",function()
       self.onscreen.hover=1
       self.onscreen.popup(8460)
    end)
-   self:event_register_call("MouseLeaveOSD",function()
+   self:register_call("OSD::Mouse::Leave",function()
       self.onscreen.popup_till = os.time()+5
       self.onscreen.hover=0
       --self.onscreen.popdown(5)
